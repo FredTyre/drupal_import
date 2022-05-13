@@ -10,6 +10,6 @@ set D9IT_CURR_AUTO_PASS=
 echo ON
 
 echo importing website %D9IT_CURR_SITE_NAME% to output\%D9IT_CURR_SITE_NAME%
-python src\d9ImportTaxonomy.py
+python src\d9_import_taxonomy.py
 
 pause
