@@ -11,4 +11,5 @@ drupal/9/input/*
 drupal/9/output/*
 
 !spec/drupal/9/example_run.bat
+!spec/setup_tools.bat
 
