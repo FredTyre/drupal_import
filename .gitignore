@@ -5,6 +5,10 @@ drivers/*.url
 drivers/*.zip
 drivers/chromedriver_win32/chromedriver.exe
 
+*.bat
+
 drupal/9/input/*
 drupal/9/output/*
+
+!spec/drupal/9/example_run.bat
 
