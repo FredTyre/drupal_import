@@ -1,22 +1,13 @@
-from datetime import datetime, timedelta, date
+import MySQLdb
+import csv
+import xml.etree.ElementTree as ET 
+import re
+import os
+import fnmatch
 
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
-
-import MySQLdb
-import csv
-import phonenumbers
-import xml.etree.ElementTree as ET 
-import re
-import sshtunnel
-import urllib.request
-import time
-import html
-import wget
-import sys
-import os
-import fnmatch
 
 INPUT_DIRECTORY = 'input'
 OUTPUT_DIRECTORY = 'output'
