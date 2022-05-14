@@ -1,9 +1,8 @@
-import MySQLdb
-import csv
 import xml.etree.ElementTree as ET 
 import re
 import os
 import fnmatch
+import MySQLdb
 
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
