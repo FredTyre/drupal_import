@@ -214,8 +214,11 @@ def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
     if(term_name is None):
         return 0
 
+    term_name = term_name.strip()
     (parent_id, parent_term) = get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name)
-
+    if parent_term is not None :
+        parent_term = parent_term.strip()
+    
     if(parent_id == 0):
         return 0
 
