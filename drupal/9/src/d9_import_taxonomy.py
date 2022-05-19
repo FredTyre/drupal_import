@@ -47,6 +47,7 @@ export_directory = os.path.join(OUTPUT_DIRECTORY, current_website)
 logs_directory = os.path.join(export_directory, LOGS_DIRECTORY)
 
 def remove_empty_lines(string_to_fix, end_line):
+    """Removes any emptyl lines from a string that needs fixing (string_to_fix). end_line is used to find the line endings in the string."""
     return_string = ""
 
     lines = string_to_fix.split(end_line)
@@ -60,6 +61,7 @@ def remove_empty_lines(string_to_fix, end_line):
     return return_string
 
 def shrink_width(string_to_shrink, new_width):
+    """Change the string (string_to_shrink) so that the words don't go past a certain width(new_width). Does not split words."""
     return_string = ""
     
     current_line_length = 0
@@ -79,6 +81,7 @@ def shrink_width(string_to_shrink, new_width):
     return return_string.strip()
 
 def convert_html(string_to_convert, end_line):
+    """Convert string that has markdown in it(string_to_convert) and remove any empty lines."""
     if string_to_convert is None :
         return ""
     
@@ -100,12 +103,16 @@ def convert_html(string_to_convert, end_line):
     return return_string.strip()
 
 def print_empty_line(file_handle):
+    """Print an empty line to a file (file_handle)."""
     file_handle.write(ENDL)
 
 def flush_print_files(debug_output_file_handle):
+    """Write any data stored in memory to the file(debug_output_file_handle)."""
     debug_output_file_handle.flush()
 
 def drupal_9_json_get_key(json_string, json_key):
+    """drupal 9 does JSON differently than python does, apparently. 
+       Find the json_key in json_string and return it's value."""
     return_string = json_string[json_string.find(json_key):]
     return_string = return_string.replace(';', ':')
     return_string_array = return_string.split(':')
@@ -114,6 +121,8 @@ def drupal_9_json_get_key(json_string, json_key):
     return return_string.strip('"')
 
 def get_site_name():
+    """Look up the human readable name of the website in the drupal database.
+       Used to verify we are at the correct website when adding new content via Selenium."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
@@ -131,6 +140,7 @@ def get_site_name():
     return return_string
 
 def get_vocabularies(debug_output_file_handle):
+    """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
@@ -186,8 +196,8 @@ def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent
     
     return True
 
-"""Query the database of the drupal 9 site to get all of the existing taxonomy terms."""
 def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
+    """Query the database of the drupal 9 site to get all of the existing taxonomy terms."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
