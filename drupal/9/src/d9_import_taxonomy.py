@@ -186,6 +186,7 @@ def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent
     
     return True
 
+'''Query the database of the drupal 9 site to get all of the existing taxonomy terms.'''
 def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
