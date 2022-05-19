@@ -101,7 +101,7 @@ def convert_html(string_to_convert, end_line):
 
 def print_empty_line(file_handle):
     file_handle.write(ENDL)
-    
+
 def flush_print_files(debug_output_file_handle):
     debug_output_file_handle.flush()
 
@@ -129,7 +129,7 @@ def get_site_name():
     return_string = drupal_9_json_get_key(str(site_information_json[0][0]), "name")
     
     return return_string
-    
+
 def get_vocabularies(debug_output_file_handle):
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
@@ -185,7 +185,6 @@ def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent
     # print("Could not find this term: (" + '"' + str(term_name) + '", ' + '"' + str(parent_name) + '")')
     
     return True
-    
 
 def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
@@ -228,7 +227,6 @@ def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
         return 0
 
     return 1+get_depth_of_term(taxonomies_in_this_vocabulary, parent_term)
-    
 
 def change_node_users_to_anonymous():
     print("Change content created by " + automated_username + " and siteadmin to be marked as created by anonymous ...")
@@ -249,7 +247,7 @@ def create_machine_readable_name(non_machine_readable_name):
     return_string = return_string.replace(" ", "_")
 
     return return_string
-    
+
 def add_vocabulary_via_selenium_ide(vocabulary_name):
     if vocabulary_name is None :
         print("Cannot add a vocabulary with no name")
@@ -289,7 +287,7 @@ def add_vocabulary_via_selenium_ide(vocabulary_name):
     driver.get(current_website_url + "/user/logout")
 
     driver.close()
-    
+
 def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name=None, parent_depth=0):
 
     if vocabulary_machine_name is None :
@@ -413,4 +411,3 @@ print("Starting Taxonomy Import of " + current_website_human_name)
 import_taxonomy_files(import_directory)
 
 debug_output_file_handle.close()
-
