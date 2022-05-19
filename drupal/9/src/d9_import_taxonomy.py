@@ -213,7 +213,7 @@ def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
 
 def get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name):
     for term in taxonomies_in_this_vocabulary:
-        if(term[1] == term_name):
+        if term[1] == term_name :
             return (term[2], term[3])
 
     return (0, None)
@@ -224,7 +224,7 @@ def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
 
     (parent_id, parent_term) = get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name)
 
-    if(parent_id == 0):
+    if parent_id == 0 :
         return 0
 
     return 1+get_depth_of_term(taxonomies_in_this_vocabulary, parent_term)
