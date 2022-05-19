@@ -1,3 +1,9 @@
+"""This script uses the following Environment Variables to setup a database connection to the 
+   drupal 6 website we are attempting to export. When setting the envrionment variables, there 
+   should not be any double quotes ("). They are used here to only to specify to the reader that 
+   the text in between double quotes can be used. This information is required for the code to be
+   able to export the website's data. See the README.TXT for more information."""
+
 import xml.etree.ElementTree as ET
 import re
 import os
@@ -161,7 +167,8 @@ def get_vocabularies(debug_output_file_handle):
         
     return vocabulary_names
 
-def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_find):
+def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_find):    
+    """Get drupal's machine readable name of the vocabulary passed in(vocabulary_name_to_find)."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
@@ -183,6 +190,9 @@ def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_fin
     return None
 
 def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name):
+    """Check to see if the term(term_name) is already in the current website. 
+       It uses local memory to speed up the check.
+       We gain a performance boost if any of the terms are already in the database."""
     term_name = term_name.strip()
     for term in taxonomies_in_this_vocabulary:
         if term[1] == term_name :
