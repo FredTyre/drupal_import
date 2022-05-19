@@ -169,14 +169,17 @@ def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_fin
     return None
 
 def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name):
-
+    term_name = term_name.strip()
     for term in taxonomies_in_this_vocabulary:
         if(term[1] == term_name):
             if(parent_name is None):
                 return False
+            parent_name = parent_name.strip()
             if(term[3] == parent_name):
                 return False
-
+            
+    # print("Could not find this term: (" + '"' + str(term_name) + '", ' + '"' + str(parent_name) + '")')
+    
     return True
     
 
@@ -280,7 +283,7 @@ def add_vocabulary_via_selenium_ide(vocabulary_name):
     driver.close()
     
 def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name=None, parent_depth=0):
-    
+
     if(vocabulary_machine_name is None):
         print("Cannot add a term to a vocabulary with no name")
         return
@@ -311,6 +314,7 @@ def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name
     elem.send_keys(term_name)
 
     if(parent_name is not None and parent_name != 'None'):
+        parent_name = parent_name.strip()
         elem = driver.find_element_by_id("edit-relations")
         elem.click()
 
@@ -364,7 +368,6 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
         
         if(term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name)):
             parent_depth = get_depth_of_term(taxonomies_in_this_vocabulary, parent_name)
-            print("parent_depth: " + str(parent_depth))
             add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
 
 def import_taxonomy_files(import_directory):
