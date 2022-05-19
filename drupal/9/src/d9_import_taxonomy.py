@@ -91,7 +91,11 @@ def convert_html(string_to_convert, end_line):
     return_string = ignore_case_replace_space.sub(" ", return_string)
 
     return_string = remove_empty_lines(return_string, end_line)
-    # print('================================================\n' + string2Convert + '--------------------------------------\n' + returnString + '================================================\n')
+    #print('================================================\n')
+    #print(string2Convert)
+    #print('================================================\n')
+    #print(returnString)
+    #print('================================================\n')
     
     return return_string.strip()
 
@@ -188,9 +192,13 @@ def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
     cursor = conn.cursor()
     
     get_sql = "SELECT tid, name, parent_target_id, "
-    get_sql = get_sql + "(SELECT name FROM taxonomy_term_field_data WHERE vid = taxonomy_term__parent.bundle AND tid = taxonomy_term__parent.parent_target_id) "
+    get_sql = get_sql + "(SELECT name FROM taxonomy_term_field_data "
+    get_sql = get_sql + "WHERE vid = taxonomy_term__parent.bundle "
+    get_sql = get_sql + "AND tid = taxonomy_term__parent.parent_target_id) "
     get_sql = get_sql + "FROM taxonomy_term_field_data "
-    get_sql = get_sql + "LEFT JOIN taxonomy_term__parent ON (taxonomy_term_field_data.vid = taxonomy_term__parent.bundle AND taxonomy_term_field_data.tid = taxonomy_term__parent.entity_id) "
+    get_sql = get_sql + "LEFT JOIN taxonomy_term__parent "
+    get_sql = get_sql + "ON (taxonomy_term_field_data.vid = taxonomy_term__parent.bundle "
+    get_sql = get_sql + "AND taxonomy_term_field_data.tid = taxonomy_term__parent.entity_id) "    
     get_sql = get_sql + "WHERE vid = '" + str(vocabulary_machine_name) + "' "
     get_sql = get_sql + "ORDER BY name, weight, taxonomy_term_field_data.tid"
     
