@@ -186,7 +186,7 @@ def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent
     
     return True
 
-'''Query the database of the drupal 9 site to get all of the existing taxonomy terms.'''
+"""Query the database of the drupal 9 site to get all of the existing taxonomy terms."""
 def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
@@ -212,7 +212,7 @@ def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
     return taxonomy_terms
 
 def get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name):
-    '''Pass in the vocabulary and term name and get back the parent id and the term name.'''
+    """Pass in the vocabulary and term name and get back the parent id and the term name."""
     for term in taxonomies_in_this_vocabulary:
         if term[1] == term_name :
             return (term[2], term[3])
@@ -220,7 +220,7 @@ def get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name):
     return (0, None)
 
 def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
-    '''Pass in the vocabulary and term name and get back how deep it is in the taxonomy tree.'''
+    """Pass in the vocabulary and term name and get back how deep it is in the taxonomy tree."""
     if term_name is None :
         return 0
 
@@ -235,7 +235,7 @@ def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
     return 1+get_depth_of_term(taxonomies_in_this_vocabulary, parent_term)
 
 def change_node_users_to_anonymous():
-    '''Change the nodes in drupal that we (or siteadmin) created to being created by Anonymous'''
+    """Change the nodes in drupal that we (or siteadmin) created to being created by Anonymous"""
     print("Change content created by " + automated_username + " and siteadmin to be marked as created by anonymous ...")
     
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
@@ -250,14 +250,14 @@ def change_node_users_to_anonymous():
     conn.close()
 
 def create_machine_readable_name(non_machine_readable_name):
-    '''Convert human text into something drupal's "machines" can read.'''
+    """Convert human text into something drupal's "machines" can read."""
     return_string = non_machine_readable_name.lower()
     return_string = return_string.replace(" ", "_")
 
     return return_string
 
 def add_vocabulary_via_selenium_ide(vocabulary_name):
-    '''Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). '''
+    """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
     if vocabulary_name is None :
         print("Cannot add a vocabulary with no name")
         return
@@ -298,8 +298,8 @@ def add_vocabulary_via_selenium_ide(vocabulary_name):
     driver.close()
 
 def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name=None, parent_depth=0):
-    '''Add a taxonomy term to the vocabulary using Selenium. 
-       If the parent_name and parent_depth are passed in, it will place the taxonomy in the correct hierarchy.'''
+    """Add a taxonomy term to the vocabulary using Selenium. 
+       If the parent_name and parent_depth are passed in, it will place the taxonomy in the correct hierarchy."""
     if vocabulary_machine_name is None :
         print("Cannot add a term to a vocabulary with no name")
         return
@@ -346,8 +346,8 @@ def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name
     driver.close()
 
 def import_taxonomy_from_xml_file(current_vocabulary_file):
-    '''Take the vocabulary xml filename and automatically create the 
-       vocabulary and all it's terms in the "current_website".'''
+    """Take the vocabulary xml filename and automatically create the 
+       vocabulary and all it's terms in the "current_website"."""
     xml_tree = ET.parse(current_vocabulary_file)
     xml_root = xml_tree.getroot()
 
@@ -389,7 +389,7 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
             add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
 
 def import_taxonomy_files(import_directory):
-    '''Import all the vocabulary files in "import_directory".'''
+    """Import all the vocabulary files in "import_directory"."""
     files_to_import = os.listdir(import_directory)
     for taxonomy_filename in files_to_import:
         if fnmatch.fnmatch(taxonomy_filename, '*_taxonomy.xml'):
@@ -398,7 +398,7 @@ def import_taxonomy_files(import_directory):
             import_taxonomy_from_xml_file(current_vocabulary_file)
 
 def prep_file_structure():
-    '''Ensures that all of the necessary file folders exist.'''
+    """Ensures that all of the necessary file folders exist."""
     if not os.path.isdir(INPUT_DIRECTORY) :
         os.mkdir(INPUT_DIRECTORY)
 
