@@ -51,21 +51,21 @@ def remove_empty_lines(string_to_fix, end_line):
 
     lines = string_to_fix.split(end_line)
     for line in lines:
-        if(line is None):
+        if line is None :
             continue
         
-        if(len(line.strip()) > 0):
+        if len(line.strip()) > 0 :
             return_string += line + end_line
 
     return return_string
 
-def shrink_width(string_to_shrink, new_width):    
+def shrink_width(string_to_shrink, new_width):
     return_string = ""
     
     current_line_length = 0
     first_word = True
     for current_word in string_to_shrink.split(" "):
-        if(not first_word and current_line_length > new_width):
+        if not first_word and current_line_length > new_width :
             return_string += ENDL
             current_line_length = 0
             first_word = True
@@ -79,7 +79,7 @@ def shrink_width(string_to_shrink, new_width):
     return return_string.strip()
 
 def convert_html(string_to_convert, end_line):
-    if(string_to_convert is None):
+    if string_to_convert is None :
         return ""
     
     return_string = string_to_convert
@@ -91,7 +91,11 @@ def convert_html(string_to_convert, end_line):
     return_string = ignore_case_replace_space.sub(" ", return_string)
 
     return_string = remove_empty_lines(return_string, end_line)
-    # print('================================================\n' + string2Convert + '--------------------------------------\n' + returnString + '================================================\n')
+    #print('================================================\n')
+    #print(string2Convert)
+    #print('================================================\n')
+    #print(returnString)
+    #print('================================================\n')
     
     return return_string.strip()
 
@@ -163,7 +167,7 @@ def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_fin
     for vocabulary in vocabularies:
         vocabulary_name = drupal_9_json_get_key(str(vocabulary), "name")
         
-        if(vocabulary_name == vocabulary_name_to_find):
+        if vocabulary_name == vocabulary_name_to_find :
             return drupal_9_json_get_key(str(vocabulary), "vid")
         
     return None
@@ -171,11 +175,11 @@ def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_fin
 def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name):
     term_name = term_name.strip()
     for term in taxonomies_in_this_vocabulary:
-        if(term[1] == term_name):
-            if(parent_name is None):
+        if term[1] == term_name :
+            if parent_name is None :
                 return False
             parent_name = parent_name.strip()
-            if(term[3] == parent_name):
+            if term[3] == parent_name :
                 return False
             
     # print("Could not find this term: (" + '"' + str(term_name) + '", ' + '"' + str(parent_name) + '")')
@@ -188,9 +192,13 @@ def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
     cursor = conn.cursor()
     
     get_sql = "SELECT tid, name, parent_target_id, "
-    get_sql = get_sql + "(SELECT name FROM taxonomy_term_field_data WHERE vid = taxonomy_term__parent.bundle AND tid = taxonomy_term__parent.parent_target_id) "
+    get_sql = get_sql + "(SELECT name FROM taxonomy_term_field_data "
+    get_sql = get_sql + "WHERE vid = taxonomy_term__parent.bundle "
+    get_sql = get_sql + "AND tid = taxonomy_term__parent.parent_target_id) "
     get_sql = get_sql + "FROM taxonomy_term_field_data "
-    get_sql = get_sql + "LEFT JOIN taxonomy_term__parent ON (taxonomy_term_field_data.vid = taxonomy_term__parent.bundle AND taxonomy_term_field_data.tid = taxonomy_term__parent.entity_id) "
+    get_sql = get_sql + "LEFT JOIN taxonomy_term__parent "
+    get_sql = get_sql + "ON (taxonomy_term_field_data.vid = taxonomy_term__parent.bundle "
+    get_sql = get_sql + "AND taxonomy_term_field_data.tid = taxonomy_term__parent.entity_id) "    
     get_sql = get_sql + "WHERE vid = '" + str(vocabulary_machine_name) + "' "
     get_sql = get_sql + "ORDER BY name, weight, taxonomy_term_field_data.tid"
     
@@ -205,13 +213,13 @@ def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
 
 def get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name):
     for term in taxonomies_in_this_vocabulary:
-        if(term[1] == term_name):
+        if term[1] == term_name :
             return (term[2], term[3])
 
     return (0, None)
 
 def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
-    if(term_name is None):
+    if term_name is None :
         return 0
 
     term_name = term_name.strip()
@@ -246,7 +254,7 @@ def create_machine_readable_name(non_machine_readable_name):
     return return_string
     
 def add_vocabulary_via_selenium_ide(vocabulary_name):
-    if(vocabulary_name is None):
+    if vocabulary_name is None :
         print("Cannot add a vocabulary with no name")
         return
     
@@ -287,7 +295,7 @@ def add_vocabulary_via_selenium_ide(vocabulary_name):
     
 def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name=None, parent_depth=0):
 
-    if(vocabulary_machine_name is None):
+    if vocabulary_machine_name is None :
         print("Cannot add a term to a vocabulary with no name")
         return
     
@@ -316,7 +324,7 @@ def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name
     elem.clear()
     elem.send_keys(term_name)
 
-    if(parent_name is not None and parent_name != 'None'):
+    if parent_name is not None and parent_name != 'None' :
         parent_name = parent_name.strip()
         elem = driver.find_element_by_id("edit-relations")
         elem.click()
@@ -348,20 +356,20 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
             
         for term_data in term:
             
-            if(term_data.tag == "vocabulary_id"):
+            if term_data.tag == "vocabulary_id" :
                 vocabulary_id = term_data.text
-            if(term_data.tag == "vocabulary_name"):
+            if term_data.tag == "vocabulary_name" :
                 vocabulary_name = term_data.text
-            if(term_data.tag == "term_id"):
+            if term_data.tag == "term_id" :
                 term_id = term_data.text
-            if(term_data.tag == "term_name"):
+            if term_data.tag == "term_name" :
                 term_name = term_data.text
-            if(term_data.tag == "term_parent_id"):
+            if term_data.tag == "term_parent_id" :
                 parent_id = term_data.text
-            if(term_data.tag == "term_parent_name"):
+            if term_data.tag == "term_parent_name" :
                 parent_name = term_data.text
             
-        if(vocabulary_name not in db_vocabularies):
+        if vocabulary_name not in db_vocabularies :
             add_vocabulary_via_selenium_ide(vocabulary_name)
             db_vocabularies = get_vocabularies(debug_output_file_handle)
 
@@ -369,7 +377,7 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
 
         taxonomies_in_this_vocabulary = get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name)
         
-        if(term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name)):
+        if term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name) :
             parent_depth = get_depth_of_term(taxonomies_in_this_vocabulary, parent_name)
             add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
 
@@ -382,19 +390,19 @@ def import_taxonomy_files(import_directory):
             import_taxonomy_from_xml_file(current_vocabulary_file)
 
 def prep_file_structure():
-    if(not os.path.isdir(INPUT_DIRECTORY)):
+    if not os.path.isdir(INPUT_DIRECTORY) :
         os.mkdir(INPUT_DIRECTORY)
 
-    if(not os.path.isdir(import_directory)):
+    if not os.path.isdir(import_directory) :
         os.mkdir(import_directory)
 
-    if(not os.path.isdir(OUTPUT_DIRECTORY)):
+    if not os.path.isdir(OUTPUT_DIRECTORY) :
         os.mkdir(OUTPUT_DIRECTORY)
 
-    if(not os.path.isdir(export_directory)):
+    if not os.path.isdir(export_directory) :
         os.mkdir(export_directory)
 
-    if(not os.path.isdir(logs_directory)):
+    if not os.path.isdir(logs_directory) :
         os.mkdir(logs_directory)
 
 prep_file_structure()
