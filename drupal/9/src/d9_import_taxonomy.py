@@ -114,7 +114,7 @@ def print_empty_line(file_handle):
     """Print an empty line to a file (file_handle)."""
     file_handle.write(ENDL)
 
-def flush_print_files(debug_output_file_handle):
+def flush_print_files():
     """Write any data stored in memory to the file(debug_output_file_handle)."""
     debug_output_file_handle.flush()
 
@@ -151,7 +151,7 @@ def get_site_name():
     
     return return_string
 
-def get_vocabularies(debug_output_file_handle):
+def get_vocabularies():
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
     conn = MySQLdb.connect(host=db_host, 
                                 user=db_user, 
@@ -177,7 +177,7 @@ def get_vocabularies(debug_output_file_handle):
         
     return vocabulary_names
 
-def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_find):    
+def get_vocabulary_machine_name(vocabulary_name_to_find):    
     """Get drupal's machine readable name of the vocabulary passed in(vocabulary_name_to_find)."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
@@ -216,7 +216,7 @@ def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent
     
     return True
 
-def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
+def get_taxonomy_terms(vocabulary_machine_name):
     """Query the database of the drupal 9 site to get all of the existing taxonomy terms."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
@@ -384,7 +384,7 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
 
     print(str(num_xml_elements) + " taxonomy terms in this XML File")
 
-    db_vocabularies = get_vocabularies(debug_output_file_handle)
+    db_vocabularies = get_vocabularies()
     num_terms_added = 0
 
     for term in xml_root:
@@ -412,11 +412,11 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
             
         if vocabulary_name not in db_vocabularies :
             add_vocabulary_via_selenium_ide(vocabulary_name)
-            db_vocabularies = get_vocabularies(debug_output_file_handle)
+            db_vocabularies = get_vocabularies()
 
-        vocabulary_machine_name = get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name)
+        vocabulary_machine_name = get_vocabulary_machine_name(vocabulary_name)
 
-        taxonomies_in_this_vocabulary = get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name)
+        taxonomies_in_this_vocabulary = get_taxonomy_terms(vocabulary_machine_name)
         
         if term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name) :
             parent_depth = get_depth_of_term(taxonomies_in_this_vocabulary, parent_name)
