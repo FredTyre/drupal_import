@@ -343,8 +343,12 @@ def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name
 def import_taxonomy_from_xml_file(current_vocabulary_file):
     xml_tree = ET.parse(current_vocabulary_file)
     xml_root = xml_tree.getroot()
+    numXMLElements = len(xml_root.getchildren())
+
+    print(str(numXMLElements) + " taxonomy terms in this XML File")
 
     db_vocabularies = get_vocabularies(debug_output_file_handle)
+    numTermsAdded = 0
 
     for term in xml_root:
         vocabulary_id = None
@@ -380,6 +384,10 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
         if term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name) :
             parent_depth = get_depth_of_term(taxonomies_in_this_vocabulary, parent_name)
             add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
+            numTermsAdded += 1
+        
+        if numTermsAdded % 5 == 5 :
+            print(str(numTermsAdded) + " have been added to the site.")
 
 def import_taxonomy_files(import_directory):
     files_to_import = os.listdir(import_directory)
