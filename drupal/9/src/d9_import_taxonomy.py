@@ -380,7 +380,7 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
        vocabulary and all it's terms in the "current_website"."""
     xml_tree = ET.parse(current_vocabulary_file)
     xml_root = xml_tree.getroot()
-    num_xml_elements = len(xml_root.getchildren())
+    num_xml_elements = len(list(xml_root))
 
     print(str(num_xml_elements) + " taxonomy terms in this XML File")
 
