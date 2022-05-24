@@ -153,7 +153,11 @@ def get_site_name():
 
 def get_vocabularies(debug_output_file_handle):
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
-    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    conn = MySQLdb.connect(host=db_host, 
+                                user=db_user, 
+                                passwd=db_password, 
+                                database=db_database, 
+                                port=db_port)
     cursor = conn.cursor()
     
     get_sql = "SELECT data FROM config WHERE name LIKE 'taxonomy.vocabulary.%' ORDER BY name"
@@ -422,7 +426,7 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
         if num_terms_added % 5 == 5 :
             print(str(num_terms_added) + " have been added to the site.")
 
-def import_taxonomy_files(import_directory):
+def import_taxonomy_files():
     """Import all the vocabulary files in "import_directory"."""
     files_to_import = os.listdir(import_directory)
     for taxonomy_filename in files_to_import:
@@ -456,6 +460,6 @@ debug_output_file_handle = open(debug_output_file, mode='w')
 current_website_human_name = get_site_name()
 print("Starting Taxonomy Import of " + current_website_human_name)
 
-import_taxonomy_files(import_directory)
+import_taxonomy_files()
 
 debug_output_file_handle.close()
