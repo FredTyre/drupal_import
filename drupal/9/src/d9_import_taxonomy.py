@@ -1,4 +1,10 @@
-import xml.etree.ElementTree as ET 
+"""This script uses the following Environment Variables to setup a database connection to the 
+   drupal 6 website we are attempting to export. When setting the envrionment variables, there 
+   should not be any double quotes ("). They are used here to only to specify to the reader that 
+   the text in between double quotes can be used. This information is required for the code to be
+   able to export the website's data. See the README.TXT for more information."""
+
+import xml.etree.ElementTree as ET
 import re
 import os
 import fnmatch
@@ -47,6 +53,7 @@ export_directory = os.path.join(OUTPUT_DIRECTORY, current_website)
 logs_directory = os.path.join(export_directory, LOGS_DIRECTORY)
 
 def remove_empty_lines(string_to_fix, end_line):
+    """Removes any emptyl lines from a string that needs fixing (string_to_fix). end_line is used to find the line endings in the string."""
     return_string = ""
 
     lines = string_to_fix.split(end_line)
@@ -60,6 +67,7 @@ def remove_empty_lines(string_to_fix, end_line):
     return return_string
 
 def shrink_width(string_to_shrink, new_width):
+    """Change the string (string_to_shrink) so that the words don't go past a certain width(new_width). Does not split words."""
     return_string = ""
     
     current_line_length = 0
@@ -79,6 +87,7 @@ def shrink_width(string_to_shrink, new_width):
     return return_string.strip()
 
 def convert_html(string_to_convert, end_line):
+    """Convert string that has markdown in it(string_to_convert) and remove any empty lines."""
     if string_to_convert is None :
         return ""
     
@@ -100,12 +109,16 @@ def convert_html(string_to_convert, end_line):
     return return_string.strip()
 
 def print_empty_line(file_handle):
+    """Print an empty line to a file (file_handle)."""
     file_handle.write(ENDL)
-    
+
 def flush_print_files(debug_output_file_handle):
+    """Write any data stored in memory to the file(debug_output_file_handle)."""
     debug_output_file_handle.flush()
 
 def drupal_9_json_get_key(json_string, json_key):
+    """drupal 9 does JSON differently than python does, apparently. 
+       Find the json_key in json_string and return it's value."""
     return_string = json_string[json_string.find(json_key):]
     return_string = return_string.replace(';', ':')
     return_string_array = return_string.split(':')
@@ -114,6 +127,8 @@ def drupal_9_json_get_key(json_string, json_key):
     return return_string.strip('"')
 
 def get_site_name():
+    """Look up the human readable name of the website in the drupal database.
+       Used to verify we are at the correct website when adding new content via Selenium."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
@@ -129,8 +144,9 @@ def get_site_name():
     return_string = drupal_9_json_get_key(str(site_information_json[0][0]), "name")
     
     return return_string
-    
+
 def get_vocabularies(debug_output_file_handle):
+    """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
@@ -151,7 +167,8 @@ def get_vocabularies(debug_output_file_handle):
         
     return vocabulary_names
 
-def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_find):
+def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_find):    
+    """Get drupal's machine readable name of the vocabulary passed in(vocabulary_name_to_find)."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
@@ -173,6 +190,9 @@ def get_vocabulary_machine_name(debug_output_file_handle, vocabulary_name_to_fin
     return None
 
 def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name):
+    """Check to see if the term(term_name) is already in the current website. 
+       It uses local memory to speed up the check.
+       We gain a performance boost if any of the terms are already in the database."""
     term_name = term_name.strip()
     for term in taxonomies_in_this_vocabulary:
         if term[1] == term_name :
@@ -185,9 +205,9 @@ def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent
     # print("Could not find this term: (" + '"' + str(term_name) + '", ' + '"' + str(parent_name) + '")')
     
     return True
-    
 
 def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
+    """Query the database of the drupal 9 site to get all of the existing taxonomy terms."""
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
     cursor = conn.cursor()
     
@@ -212,6 +232,7 @@ def get_taxonomy_terms(debug_output_file_handle, vocabulary_machine_name):
     return taxonomy_terms
 
 def get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name):
+    """Pass in the vocabulary and term name and get back the parent id and the term name."""
     for term in taxonomies_in_this_vocabulary:
         if term[1] == term_name :
             return (term[2], term[3])
@@ -219,6 +240,7 @@ def get_parent_id_and_term_name(taxonomies_in_this_vocabulary, term_name):
     return (0, None)
 
 def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
+    """Pass in the vocabulary and term name and get back how deep it is in the taxonomy tree."""
     if term_name is None :
         return 0
 
@@ -227,13 +249,13 @@ def get_depth_of_term(taxonomies_in_this_vocabulary, term_name):
     if parent_term is not None :
         parent_term = parent_term.strip()
     
-    if(parent_id == 0):
+    if parent_id == 0 :
         return 0
 
     return 1+get_depth_of_term(taxonomies_in_this_vocabulary, parent_term)
-    
 
 def change_node_users_to_anonymous():
+    """Change the nodes in drupal that we (or siteadmin) created to being created by Anonymous"""
     print("Change content created by " + automated_username + " and siteadmin to be marked as created by anonymous ...")
     
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
@@ -248,12 +270,14 @@ def change_node_users_to_anonymous():
     conn.close()
 
 def create_machine_readable_name(non_machine_readable_name):
+    """Convert human text into something drupal's "machines" can read."""
     return_string = non_machine_readable_name.lower()
     return_string = return_string.replace(" ", "_")
 
     return return_string
-    
+
 def add_vocabulary_via_selenium_ide(vocabulary_name):
+    """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
     if vocabulary_name is None :
         print("Cannot add a vocabulary with no name")
         return
@@ -292,9 +316,10 @@ def add_vocabulary_via_selenium_ide(vocabulary_name):
     driver.get(current_website_url + "/user/logout")
 
     driver.close()
-    
-def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name=None, parent_depth=0):
 
+def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name=None, parent_depth=0):
+    """Add a taxonomy term to the vocabulary using Selenium. 
+       If the parent_name and parent_depth are passed in, it will place the taxonomy in the correct hierarchy."""
     if vocabulary_machine_name is None :
         print("Cannot add a term to a vocabulary with no name")
         return
@@ -341,6 +366,8 @@ def add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name
     driver.close()
 
 def import_taxonomy_from_xml_file(current_vocabulary_file):
+    """Take the vocabulary xml filename and automatically create the 
+       vocabulary and all it's terms in the "current_website"."""
     xml_tree = ET.parse(current_vocabulary_file)
     xml_root = xml_tree.getroot()
     numXMLElements = len(xml_root.getchildren())
@@ -390,6 +417,7 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
             print(str(numTermsAdded) + " have been added to the site.")
 
 def import_taxonomy_files(import_directory):
+    """Import all the vocabulary files in "import_directory"."""
     files_to_import = os.listdir(import_directory)
     for taxonomy_filename in files_to_import:
         if fnmatch.fnmatch(taxonomy_filename, '*_taxonomy.xml'):
@@ -398,6 +426,7 @@ def import_taxonomy_files(import_directory):
             import_taxonomy_from_xml_file(current_vocabulary_file)
 
 def prep_file_structure():
+    """Ensures that all of the necessary file folders exist."""
     if not os.path.isdir(INPUT_DIRECTORY) :
         os.mkdir(INPUT_DIRECTORY)
 
@@ -424,4 +453,3 @@ print("Starting Taxonomy Import of " + current_website_human_name)
 import_taxonomy_files(import_directory)
 
 debug_output_file_handle.close()
-
