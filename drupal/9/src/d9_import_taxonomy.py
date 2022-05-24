@@ -1,6 +1,6 @@
-"""This script uses the following Environment Variables to setup a database connection to the 
-   drupal 6 website we are attempting to export. When setting the envrionment variables, there 
-   should not be any double quotes ("). They are used here to only to specify to the reader that 
+"""This script uses the following Environment Variables to setup a database connection to the
+   drupal 6 website we are attempting to export. When setting the envrionment variables, there
+   should not be any double quotes ("). They are used here to only to specify to the reader that
    the text in between double quotes can be used. This information is required for the code to be
    able to export the website's data. See the README.TXT for more information."""
 
@@ -53,7 +53,8 @@ export_directory = os.path.join(OUTPUT_DIRECTORY, current_website)
 logs_directory = os.path.join(export_directory, LOGS_DIRECTORY)
 
 def remove_empty_lines(string_to_fix, end_line):
-    """Removes any emptyl lines from a string that needs fixing (string_to_fix). end_line is used to find the line endings in the string."""
+    """Removes any emptyl lines from a string that needs fixing (string_to_fix). 
+       end_line is used to find the line endings in the string."""
     return_string = ""
 
     lines = string_to_fix.split(end_line)
@@ -67,7 +68,8 @@ def remove_empty_lines(string_to_fix, end_line):
     return return_string
 
 def shrink_width(string_to_shrink, new_width):
-    """Change the string (string_to_shrink) so that the words don't go past a certain width(new_width). Does not split words."""
+    """Change the string (string_to_shrink) so that the words don't go past a 
+       certain width(new_width). Does not split words."""
     return_string = ""
     
     current_line_length = 0
@@ -129,7 +131,11 @@ def drupal_9_json_get_key(json_string, json_key):
 def get_site_name():
     """Look up the human readable name of the website in the drupal database.
        Used to verify we are at the correct website when adding new content via Selenium."""
-    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    conn = MySQLdb.connect(host=db_host, 
+                           user=db_user, 
+                           passwd=db_password, 
+                           database=db_database, 
+                           port=db_port)
     cursor = conn.cursor()
     
     get_sql = "SELECT data FROM config WHERE name = 'system.site'"
@@ -370,12 +376,12 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
        vocabulary and all it's terms in the "current_website"."""
     xml_tree = ET.parse(current_vocabulary_file)
     xml_root = xml_tree.getroot()
-    numXMLElements = len(xml_root.getchildren())
+    num_xml_elements = len(xml_root.getchildren())
 
-    print(str(numXMLElements) + " taxonomy terms in this XML File")
+    print(str(num_xml_elements) + " taxonomy terms in this XML File")
 
     db_vocabularies = get_vocabularies(debug_output_file_handle)
-    numTermsAdded = 0
+    num_terms_added = 0
 
     for term in xml_root:
         vocabulary_id = None
@@ -411,10 +417,10 @@ def import_taxonomy_from_xml_file(current_vocabulary_file):
         if term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name) :
             parent_depth = get_depth_of_term(taxonomies_in_this_vocabulary, parent_name)
             add_taxonomy_term(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
-            numTermsAdded += 1
+            num_terms_added += 1
         
-        if numTermsAdded % 5 == 5 :
-            print(str(numTermsAdded) + " have been added to the site.")
+        if num_terms_added % 5 == 5 :
+            print(str(num_terms_added) + " have been added to the site.")
 
 def import_taxonomy_files(import_directory):
     """Import all the vocabulary files in "import_directory"."""
