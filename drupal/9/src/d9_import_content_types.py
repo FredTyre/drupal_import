@@ -161,22 +161,24 @@ def get_content_types():
                                 port=db_port)
     cursor = conn.cursor()
     
-    get_sql = "SELECT data FROM config WHERE name LIKE 'taxonomy.vocabulary.%' ORDER BY name"
+    get_sql = "SELECT * FROM config WHERE name LIKE 'node.type.%'"
     
-    debug_output_file_handle.write("get_vocabularies sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
     debug_output_file_handle.flush()
     cursor.execute(get_sql)
-    vocabularies = cursor.fetchall()
+    content_types = cursor.fetchall()
     cursor.close()
     conn.close()
 
-    vocabulary_names = []
+    content_type_machine_names = []
     
-    for vocabulary in vocabularies:
-        vocabulary_name = drupal_9_json_get_key(str(vocabulary), "name")
-        vocabulary_names.append(vocabulary_name)
+    for content_type in content_types:
+        config_name = content_type[1]
+        content_type_machine_name = config_name.split('.')[2]
+        if content_type_machine_name is not None:
+            content_type_machine_names.append(content_type_machine_name)
         
-    return vocabulary_names
+    return content_type_machine_names
 
 def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name):
     """Check to see if the term(term_name) is already in the current website. 
@@ -202,10 +204,10 @@ def create_machine_readable_name(non_machine_readable_name):
 
     return return_string
 
-def add_content_type_via_selenium_ide(content_type):
+def add_content_type_via_selenium_ide(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label, ct_has_body, ct_body_label):
     """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
-    if content_type is None :
-        print("Cannot add a vocabulary with no name")
+    if ct_human_name is None :
+        print("Cannot add a content type with no name")
         return
     
     driver = webdriver.Chrome()
@@ -224,19 +226,29 @@ def add_content_type_via_selenium_ide(content_type):
 
     driver.find_element_by_id("edit-submit").click()
     
-    driver.get(current_website_url + '/admin/structure/taxonomy/add')
-    assert "Add vocabulary | " + current_website_human_name in driver.title
+    driver.get(current_website_url + '/admin/structure/types/add')
+    assert "Add content type | " + current_website_human_name in driver.title
 
     elem = driver.find_element_by_id("edit-name")
     elem.clear()
-    elem.send_keys(content_type)
+    elem.send_keys(ct_human_name)
     elem.send_keys(Keys.TAB)
 
-    elem = driver.find_element_by_id("edit-vid")
+    elem = driver.find_element_by_id("edit-type")
     elem.clear()
-    elem.send_keys(create_machine_readable_name(content_type))
+    elem.send_keys(ct_machine_name)
 
-    elem = driver.find_element_by_id("edit-submit")
+    if ct_description is not None:
+        elem = driver.find_element_by_id("edit-description")
+        elem.clear()
+        elem.send_keys(ct_description)
+
+    if ct_help is not None:
+        elem = driver.find_element_by_id("edit-help")
+        elem.clear()
+        elem.send_keys(ct_help)
+
+    elem = driver.find_element_by_id("edit-save-continue")
     elem.click()
     
     driver.get(current_website_url + "/user/logout")
@@ -291,57 +303,75 @@ def import_content_type_from_xml_file(current_content_type_file):
 
     print(str(num_xml_elements) + " content type fields in this XML File")
 
-    db_vocabularies = get_content_types()
+    db_content_types = get_content_types()
     num_terms_added = 0
 
     print(xml_root)
     
-    for term in xml_root:
-        vocabulary_id = None
-        vocabulary_name = None
-        term_id = None
-        term_name = None
-        parent_id = None
-        parent_name = None
+    for content_type in xml_root:
+        ct_machine_name = None
+        ct_human_name = None
+        ct_module = None
+        ct_description = None
+        ct_help = None
+        ct_has_title = None
+        ct_title_label = None
+        ct_has_body = None
+        ct_body_label = None
             
-        for term_data in term:
+        for content_type in content_type:
             
-            if term_data.tag == "vocabulary_id" :
-                vocabulary_id = term_data.text
-            if term_data.tag == "vocabulary_name" :
-                vocabulary_name = term_data.text
-            if term_data.tag == "term_id" :
-                term_id = term_data.text
-            if term_data.tag == "term_name" :
-                term_name = term_data.text
-            if term_data.tag == "term_parent_id" :
-                parent_id = term_data.text
-            if term_data.tag == "term_parent_name" :
-                parent_name = term_data.text
+            if content_type.tag == "ct_machine_name" :
+                ct_machine_name = content_type.text
+                print(ct_machine_name)
+            if content_type.tag == "ct_human_name" :
+                ct_human_name = content_type.text
+                print(ct_human_name)
+            if content_type.tag == "ct_module" :
+                ct_module = content_type.text
+                print(ct_module)
+            if content_type.tag == "ct_description" :
+                ct_description = content_type.text
+                print(ct_description)
+            if content_type.tag == "ct_help" :
+                ct_help = content_type.text
+                print(ct_help)
+            if content_type.tag == "ct_has_title" :
+                ct_has_title = content_type.text
+                print(ct_has_title)
+            if content_type.tag == "ct_title_label" :
+                ct_title_label = content_type.text
+                print(ct_title_label)
+            if content_type.tag == "ct_has_body" :
+                ct_has_body = content_type.text
+                print(ct_has_body)
+            if content_type.tag == "ct_body_label" :
+                ct_body_label = content_type.text
+                print(ct_body_label)
             
-        if vocabulary_name not in db_vocabularies :
-            add_vocabulary_via_selenium_ide(vocabulary_name)
-            db_vocabularies = get_vocabularies()
+        if ct_machine_name not in db_content_types :
+            add_content_type_via_selenium_ide(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label, ct_has_body, ct_body_label)
+            db_content_types = get_content_types()
 
-        vocabulary_machine_name = get_vocabulary_machine_name(vocabulary_name)
-
-        taxonomies_in_this_vocabulary = get_taxonomy_terms(vocabulary_machine_name)
-        
-        if term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name) :
-            add_content_type_field(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
-            num_terms_added += 1
-        
+#        vocabulary_machine_name = get_vocabulary_machine_name(vocabulary_name)
+#
+#        taxonomies_in_this_vocabulary = get_taxonomy_terms(vocabulary_machine_name)
+#        
+#        if term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name) :
+#            add_content_type_field(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
+#            num_terms_added += 1
+#
         if num_terms_added % 5 == 5 :
             print(str(num_terms_added) + " have been added to the site.")
 
-def import_taxonomy_files():
-    """Import all the vocabulary files in "import_directory"."""
+def import_content_type_files():
+    """Import all the content type files in "import_directory"."""
     files_to_import = os.listdir(import_directory)
-    for taxonomy_filename in files_to_import:
-        if fnmatch.fnmatch(taxonomy_filename, '*_taxonomy.xml'):
-            print("Found a vocabulary to import: " + taxonomy_filename)
-            current_vocabulary_file = os.path.join(import_directory, taxonomy_filename)
-            import_taxonomy_from_xml_file(current_vocabulary_file)
+    for content_type_filename in files_to_import:
+        if fnmatch.fnmatch(content_type_filename, 'content_type_*.xml'):
+            print("Found a content type to import: " + content_type_filename)
+            current_content_type_file = os.path.join(import_directory, content_type_filename)
+            import_content_type_from_xml_file(current_content_type_file)
 
 def prep_file_structure():
     """Ensures that all of the necessary file folders exist."""
@@ -366,8 +396,8 @@ debug_output_file = os.path.join(logs_directory, 'debug.log')
 debug_output_file_handle = open(debug_output_file, mode='w')
 
 current_website_human_name = get_site_name()
-print("Starting Taxonomy Import of " + current_website_human_name)
+print("Starting Content Type Import of " + current_website_human_name)
 
-import_taxonomy_files()
+import_content_type_files()
 
 debug_output_file_handle.close()
