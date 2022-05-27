@@ -56,6 +56,7 @@ logs_directory = os.path.join(export_directory, LOGS_DIRECTORY)
 def remove_empty_lines(string_to_fix, end_line):
     """Removes any emptyl lines from a string that needs fixing (string_to_fix). 
        end_line is used to find the line endings in the string."""
+
     return_string = ""
 
     lines = string_to_fix.split(end_line)
@@ -71,6 +72,7 @@ def remove_empty_lines(string_to_fix, end_line):
 def shrink_width(string_to_shrink, new_width):
     """Change the string (string_to_shrink) so that the words don't go past a 
        certain width(new_width). Does not split words."""
+
     return_string = ""
     
     current_line_length = 0
@@ -91,6 +93,7 @@ def shrink_width(string_to_shrink, new_width):
 
 def convert_html(string_to_convert, end_line):
     """Convert string that has markdown in it(string_to_convert) and remove any empty lines."""
+
     if string_to_convert is None :
         return ""
     
@@ -113,25 +116,38 @@ def convert_html(string_to_convert, end_line):
 
 def print_empty_line(file_handle):
     """Print an empty line to a file (file_handle)."""
+
     file_handle.write(ENDL)
 
 def flush_print_files():
     """Write any data stored in memory to the file(debug_output_file_handle)."""
+
     debug_output_file_handle.flush()
 
 def drupal_9_json_get_key(json_string, json_key):
     """drupal 9 does JSON differently than python does, apparently. 
        Find the json_key in json_string and return it's value."""
-    return_string = json_string[json_string.find(json_key):]
+
+    str_json_string = str(json_string)
+    return_string = str_json_string[str_json_string.find(json_key):]
     return_string = return_string.replace(';', ':')
     return_string_array = return_string.split(':')
     return_string = return_string_array[3]
     
     return return_string.strip('"')
 
+def clean_field_name(str_field_name):
+    str_field_name = str(str_field_name)
+    clean_index = str_field_name.find("field_")
+    if clean_index >= 0 :
+        return str_field_name[clean_index+6:]
+    
+    return str_field_name
+
 def get_site_name():
     """Look up the human readable name of the website in the drupal database.
        Used to verify we are at the correct website when adding new content via Selenium."""
+
     conn = MySQLdb.connect(host=db_host, 
                            user=db_user, 
                            passwd=db_password, 
@@ -148,12 +164,16 @@ def get_site_name():
     cursor.close()
     conn.close()
 
-    return_string = drupal_9_json_get_key(str(site_information_json[0][0]), "name")
+    if site_information_json is None:
+        return ""
+
+    return_string = drupal_9_json_get_key(site_information_json[0][0], "name")
     
     return return_string
 
 def get_content_types():
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
+
     conn = MySQLdb.connect(host=db_host, 
                                 user=db_user, 
                                 passwd=db_password, 
@@ -180,22 +200,68 @@ def get_content_types():
         
     return content_type_machine_names
 
-def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name):
-    """Check to see if the term(term_name) is already in the current website. 
-       It uses local memory to speed up the check.
-       We gain a performance boost if any of the terms are already in the database."""
-    term_name = term_name.strip()
-    for term in taxonomies_in_this_vocabulary:
-        if term[1] == term_name :
-            if parent_name is None :
-                return False
-            parent_name = parent_name.strip()
-            if term[3] == parent_name :
-                return False
-            
-    # print("Could not find this term: (" + '"' + str(term_name) + '", ' + '"' + str(parent_name) + '")')
+def ct_field_exists(ct_machine_name, ct_field_name="body"):
+    """Return true if the database has a field (ct_field_name) for content type ct_machine_name"""
+
+    if ct_machine_name is None:
+        print("ct_body_field_exists was run for a content type that doesn't exist in the database: " + ct_machine_name)
+        return False
+
+    conn = MySQLdb.connect(host=db_host, 
+                                user=db_user, 
+                                passwd=db_password, 
+                                database=db_database, 
+                                port=db_port)
+    cursor = conn.cursor()
     
+    get_sql = "SELECT data FROM config WHERE name LIKE 'field.field.node." + ct_machine_name + "." + ct_field_name + "'"
+    
+    debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(get_sql)
+    content_type_metadata = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    if content_type_metadata is None or len(content_type_metadata) <=0 :
+        return False
+
     return True
+
+def get_custom_body_label(ct_machine_name):
+    """Get the custom body field label from content type (ct_machine_name)."""
+
+    if ct_machine_name is None:
+        print("get_custom_body_label was run for a content type that doesn't exist in the database: " + ct_machine_name)
+        return None
+    
+    conn = MySQLdb.connect(host=db_host, 
+                                user=db_user, 
+                                passwd=db_password, 
+                                database=db_database, 
+                                port=db_port)
+    cursor = conn.cursor()
+    
+    get_sql = "SELECT data FROM config WHERE name LIKE 'field.field.node." + ct_machine_name + ".body'"
+    
+    debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(get_sql)
+    content_type_field_body_metadata = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    if content_type_field_body_metadata is None:
+        return ""
+
+    custom_body_label = ""
+
+    for ctfbmd_record in content_type_field_body_metadata:
+        print(ctfbmd_record)
+        custom_body_label = drupal_9_json_get_key(ctfbmd_record[0], "label")
+
+    return custom_body_label
+
 
 def create_machine_readable_name(non_machine_readable_name):
     """Convert human text into something drupal's "machines" can read."""
@@ -204,7 +270,7 @@ def create_machine_readable_name(non_machine_readable_name):
 
     return return_string
 
-def add_content_type_via_selenium_ide(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label, ct_has_body, ct_body_label):
+def add_content_type_via_selenium(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label):
     """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
     if ct_human_name is None :
         print("Cannot add a content type with no name")
@@ -243,6 +309,11 @@ def add_content_type_via_selenium_ide(ct_machine_name, ct_human_name, ct_module,
         elem.clear()
         elem.send_keys(ct_description)
 
+    if ct_has_title and ct_title_label != "Title" and ct_title_label is not None:
+        elem = driver.find_element_by_id("edit-title-label")
+        elem.clear()
+        elem.send_keys(ct_title_label)
+
     if ct_help is not None:
         elem = driver.find_element_by_id("edit-help")
         elem.clear()
@@ -255,9 +326,9 @@ def add_content_type_via_selenium_ide(ct_machine_name, ct_human_name, ct_module,
 
     driver.close()
 
-def add_content_type_field(content_type_machine_name, content_type_field):
-    """Add a taxonomy term to the vocabulary using Selenium. 
-       If the parent_name and parent_depth are passed in, it will place the taxonomy in the correct hierarchy."""
+def add_longtext_content_type_field(content_type_machine_name, content_type_human_name, content_type_field, required_field, curr_ct_field_default):
+    """Add a longtext (MySQL field type) content type field using Selenium. """
+
     if content_type_machine_name is None :
         print("Cannot add a term to a vocabulary with no name")
         return
@@ -280,12 +351,113 @@ def add_content_type_field(content_type_machine_name, content_type_field):
 
     driver.find_element_by_id("edit-submit").click()
     
-    driver.get(current_website_url + '/admin/structure/taxonomy/manage/' + content_type_machine_name + '/add')
-    assert "Add term | " + current_website_human_name in driver.title
+    driver.get(current_website_url + '/admin/structure/types/manage/' + content_type_machine_name + '/fields/add-field')
+    assert "Add field | " + current_website_human_name in driver.title
 
-    elem = driver.find_element_by_id("edit-name-0-value")
+    select = Select(driver.find_element_by_id('edit-new-storage-type'))
+    select.select_by_visible_text("Text (formatted, long, with summary)")
+    
+    elem = driver.find_element_by_id("edit-label")
     elem.clear()
     elem.send_keys(content_type_field)
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    assert content_type_field + " | " + current_website_human_name in driver.title
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    assert content_type_field + " settings for " + content_type_human_name + " | " + current_website_human_name in driver.title
+
+    checkbox = driver.find_element_by_id("edit-required")
+    if required_field :
+        checkbox.click()
+    else:
+        checkbox.clear()
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    driver.get(current_website_url + "/user/logout")
+
+    driver.close()
+
+def remove_ct_body_field_via_selenium(content_type_machine_name):
+    """Remove the body field from content type ct_machine_name """
+
+    if content_type_machine_name is None :
+        print("Cannot remove the body field for a content type with no name")
+        return
+    
+    print("Removing this content type's body field: ", str(content_type_machine_name))
+
+    driver = webdriver.Chrome()
+
+    driver.get(current_website_url + "/user")
+
+    assert "Log in | " + current_website_human_name in driver.title
+    
+    username = driver.find_element_by_id("edit-name")
+    username.clear()
+    username.send_keys(automated_username)
+
+    password = driver.find_element_by_id("edit-pass")
+    password.clear()
+    password.send_keys(automated_password)
+
+    driver.find_element_by_id("edit-submit").click()
+    
+    driver.get(current_website_url + '/admin/structure/types/manage/' + content_type_machine_name + '/fields/node.' + content_type_machine_name + '.body/delete')
+    assert "Are you sure you want to delete the field Body? | " + current_website_human_name in driver.title
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+    
+    driver.get(current_website_url + "/user/logout")
+
+    driver.close()
+
+def rename_ct_body_field_via_selenium(content_type_machine_name, content_type_human_name, db_body_label, ct_body_label):
+    """Use selenium to rename the body field for content type content_type_machine_name from db_body_label to the label ct_body_label."""
+
+    if content_type_machine_name is None :
+        print("Cannot rename the body label for a content type with no name")
+        return
+
+    if db_body_label is None :
+        print("database has an empty body label for content type: " + content_type_machine_name + " with an empty label: " + db_body_label)
+        return
+
+    if ct_body_label is None :
+        print("Cannot rename the body label for content type: " + content_type_machine_name + " with an empty label: " + ct_body_label)
+        return
+    
+    print("Renaming this content type's body field: ", str(content_type_machine_name), " from ", db_body_label, " to ", ct_body_label)
+
+    driver = webdriver.Chrome()
+
+    driver.get(current_website_url + "/user")
+
+    assert "Log in | " + current_website_human_name in driver.title
+    
+    username = driver.find_element_by_id("edit-name")
+    username.clear()
+    username.send_keys(automated_username)
+
+    password = driver.find_element_by_id("edit-pass")
+    password.clear()
+    password.send_keys(automated_password)
+
+    driver.find_element_by_id("edit-submit").click()
+    
+    driver.get(current_website_url + '/admin/structure/types/manage/' + content_type_machine_name + '/fields/node.' + content_type_machine_name + '.body')
+    assert db_body_label + " settings for " + content_type_human_name + " | " + current_website_human_name in driver.title
+
+    elem = driver.find_element_by_id("edit-label")
+    elem.clear()
+    elem.send_keys(ct_body_label)
 
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
@@ -304,11 +476,11 @@ def import_content_type_from_xml_file(current_content_type_file):
     print(str(num_xml_elements) + " content type fields in this XML File")
 
     db_content_types = get_content_types()
-    num_terms_added = 0
+    num_fields_added = 0
 
     print(xml_root)
     
-    for content_type in xml_root:
+    for content_types in xml_root:
         ct_machine_name = None
         ct_human_name = None
         ct_module = None
@@ -318,51 +490,97 @@ def import_content_type_from_xml_file(current_content_type_file):
         ct_title_label = None
         ct_has_body = None
         ct_body_label = None
-            
-        for content_type in content_type:
+        
+        fields = []
+        for content_type in content_types:
             
             if content_type.tag == "ct_machine_name" :
                 ct_machine_name = content_type.text
-                print(ct_machine_name)
             if content_type.tag == "ct_human_name" :
                 ct_human_name = content_type.text
-                print(ct_human_name)
             if content_type.tag == "ct_module" :
                 ct_module = content_type.text
-                print(ct_module)
             if content_type.tag == "ct_description" :
                 ct_description = content_type.text
-                print(ct_description)
             if content_type.tag == "ct_help" :
                 ct_help = content_type.text
-                print(ct_help)
             if content_type.tag == "ct_has_title" :
-                ct_has_title = content_type.text
-                print(ct_has_title)
+                if content_type.text == "1" :
+                    ct_has_title = True
+                else :
+                    ct_has_title = False
             if content_type.tag == "ct_title_label" :
                 ct_title_label = content_type.text
-                print(ct_title_label)
             if content_type.tag == "ct_has_body" :
-                ct_has_body = content_type.text
-                print(ct_has_body)
+                if content_type.text == "1" :
+                    ct_has_body = True
+                else :
+                    ct_has_body = False
             if content_type.tag == "ct_body_label" :
                 ct_body_label = content_type.text
-                print(ct_body_label)
+            
+            if content_type.tag == "content_type_field" :
+                curr_ct_field_name = None
+                curr_ct_field_type = None
+                curr_ct_field_can_be_null = None
+                curr_ct_field_key = None
+                curr_ct_field_default = None
+                curr_ct_field_extra = None
+
+                for field_properties in content_type:
+                    if field_properties.tag == "ct_field_name" :
+                        ct_field_name = clean_field_name(field_properties.text)
+                    if field_properties.tag == "ct_field_type" :
+                        ct_field_type = field_properties.text
+                    if field_properties.tag == "ct_field_can_be_null" :
+                        ct_field_can_be_null = field_properties.text
+                        if content_type.text == "YES" :
+                            ct_field_can_be_null = True
+                        else :
+                            ct_field_can_be_null = False
+                    if field_properties.tag == "ct_field_key" :
+                        ct_field_key = field_properties.text
+                    if field_properties.tag == "ct_field_default" :
+                        ct_field_default = field_properties.text
+                    if field_properties.tag == "ct_field_extra" :
+                        ct_field_extra = field_properties.text
+
+                fields.append((ct_field_name, ct_field_type, ct_field_can_be_null, ct_field_key, ct_field_default, ct_field_extra))
             
         if ct_machine_name not in db_content_types :
-            add_content_type_via_selenium_ide(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label, ct_has_body, ct_body_label)
+            add_content_type_via_selenium(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label)
+            num_fields_added += 2
             db_content_types = get_content_types()
 
-#        vocabulary_machine_name = get_vocabulary_machine_name(vocabulary_name)
-#
-#        taxonomies_in_this_vocabulary = get_taxonomy_terms(vocabulary_machine_name)
-#        
-#        if term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent_name) :
-#            add_content_type_field(vocabulary_machine_name, term_name, parent_id, parent_name, parent_depth)
-#            num_terms_added += 1
-#
-        if num_terms_added % 5 == 5 :
-            print(str(num_terms_added) + " have been added to the site.")
+        if not ct_has_body and ct_field_exists(ct_machine_name):
+            remove_ct_body_field_via_selenium(ct_machine_name)
+            num_fields_added -= 1
+
+        if ct_has_body and ct_body_label != "Body" :
+            if ct_field_exists(ct_machine_name) :
+                db_custom_body_label = get_custom_body_label(ct_machine_name)
+                if db_custom_body_label != ct_body_label :
+                    rename_ct_body_field_via_selenium(ct_machine_name, ct_human_name, db_custom_body_label, ct_body_label)
+
+        for field in fields:
+            print(field)
+
+            curr_ct_field_name = field[0]
+            curr_ct_field_type = field[1]
+            curr_ct_field_can_be_null = field[2]
+            curr_ct_field_key = field[3]
+            curr_ct_field_default = field[4]
+            curr_ct_field_extra = field[5]
+
+            if not ct_field_exists(ct_machine_name, curr_ct_field_name) :
+                print("Need to add fields here... - Field Name needs to be human readable (not machine)")
+                # Text (formatted, long)
+                if curr_ct_field_type == "longtext":
+                    add_longtext_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_name, not curr_ct_field_can_be_null, curr_ct_field_default)
+                num_fields_added += 1
+
+        if num_fields_added % 5 == 5 :
+            print(str(num_fields_added) + " have been added to the site.")
 
 def import_content_type_files():
     """Import all the content type files in "import_directory"."""
