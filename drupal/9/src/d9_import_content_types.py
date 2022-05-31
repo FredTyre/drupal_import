@@ -399,6 +399,79 @@ def add_text_content_type_field(content_type_machine_name,
 
     driver.close()
 
+def add_integer_content_type_field(content_type_machine_name, 
+                                   content_type_human_name, 
+                                   content_type_field_human_name, 
+                                   content_type_field_machine_name, 
+                                   required_field,
+                                   content_type_field_default,
+                                   content_type_field_multiple):
+
+    """Add a text content type field using Selenium. """
+
+    if content_type_machine_name is None :
+        print("Cannot add a text field to a content type with no name")
+        return
+    
+    print("Adding content_type_field: ", str(content_type_field_human_name))
+
+    driver = webdriver.Chrome()
+
+    driver.get(current_website_url + "/user")
+
+    assert "Log in | " + current_website_human_name in driver.title
+    
+    username = driver.find_element_by_id("edit-name")
+    username.clear()
+    username.send_keys(automated_username)
+
+    password = driver.find_element_by_id("edit-pass")
+    password.clear()
+    password.send_keys(automated_password)
+
+    driver.find_element_by_id("edit-submit").click()
+    
+    driver.get(current_website_url + '/admin/structure/types/manage/' + content_type_machine_name + '/fields/add-field')
+    assert "Add field | " + current_website_human_name in driver.title
+
+    select = Select(driver.find_element_by_id('edit-new-storage-type'))
+    select.select_by_visible_text("Number (integer)")
+    
+    elem = driver.find_element_by_id("edit-label")
+    elem.clear()
+    elem.send_keys(content_type_field_human_name)
+    elem.send_keys(Keys.TAB)
+    elem.click()
+
+    elem = driver.find_element_by_id("edit-field-name")
+    elem.clear()
+    elem.send_keys(content_type_field_machine_name)
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    assert content_type_field_human_name + " | " + current_website_human_name in driver.title
+
+    if content_type_field_multiple :
+        select = Select(driver.find_element_by_id('edit-cardinality'))
+        select.select_by_visible_text("Unlimited")
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    assert content_type_field_human_name + " settings for " + content_type_human_name + " | " + current_website_human_name in driver.title
+
+    checkbox = driver.find_element_by_id("edit-required")
+    if required_field :
+        checkbox.click()
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    driver.get(current_website_url + "/user/logout")
+
+    driver.close()
+
 def add_file_content_type_field(content_type_machine_name,
                                 content_type_human_name,
                                 content_type_field_human_name,
@@ -450,6 +523,10 @@ def add_file_content_type_field(content_type_machine_name,
     elem.click()
 
     assert content_type_field_human_name + " | " + current_website_human_name in driver.title
+
+    if content_type_field_multiple :
+        select = Select(driver.find_element_by_id('edit-cardinality'))
+        select.select_by_visible_text("Unlimited")
 
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
@@ -561,12 +638,8 @@ def import_content_type_from_xml_file(current_content_type_file):
     xml_root = xml_tree.getroot()
     num_xml_elements = len(list(xml_root))
 
-    print(str(num_xml_elements) + " content type fields in this XML File")
-
     db_content_types = get_content_types()
     num_fields_added = 0
-
-    print(xml_root)
     
     for content_types in xml_root:
         ct_machine_name = None
@@ -705,8 +778,6 @@ def import_content_type_from_xml_file(current_content_type_file):
 
 
         for field in fields:
-            print(field)
-
             curr_ct_field_name = field[0]
             curr_ct_field_type = field[1]
             curr_ct_field_required = field[2]
@@ -727,6 +798,11 @@ def import_content_type_from_xml_file(current_content_type_file):
 
             if not ct_field_exists(ct_machine_name, curr_ct_field_name) :
                 # Need to add fields here...
+
+                # integer
+                if curr_ct_field_type == "number_integer":
+                    add_integer_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_label, curr_ct_field_name, curr_ct_field_required, "", curr_ct_field_multiple)
+                
                 # Text (formatted, long)
                 if curr_ct_field_type == "text":
                     add_text_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_label, curr_ct_field_name, curr_ct_field_required, "", curr_ct_field_multiple)
@@ -737,7 +813,7 @@ def import_content_type_from_xml_file(current_content_type_file):
                 num_fields_added += 1
 
         if num_fields_added % 5 == 5 :
-            print(str(num_fields_added) + " have been added to the site.")
+            print(str(num_fields_added) + " have been added to the content type " + ct_human_name + ".")
 
 def import_content_type_files():
     """Import all the content type files in "import_directory"."""
