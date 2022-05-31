@@ -214,7 +214,7 @@ def ct_field_exists(ct_machine_name, ct_field_name="body"):
                                 port=db_port)
     cursor = conn.cursor()
     
-    get_sql = "SELECT data FROM config WHERE name LIKE 'field.field.node." + ct_machine_name + "." + ct_field_name + "'"
+    get_sql = "SELECT data FROM config WHERE name LIKE 'field.field.node." + ct_machine_name + ".field_" + ct_field_name + "'"
     
     debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
     debug_output_file_handle.flush()
@@ -326,14 +326,21 @@ def add_content_type_via_selenium(ct_machine_name, ct_human_name, ct_module, ct_
 
     driver.close()
 
-def add_longtext_content_type_field(content_type_machine_name, content_type_human_name, content_type_field, required_field, curr_ct_field_default):
-    """Add a longtext (MySQL field type) content type field using Selenium. """
+def add_text_content_type_field(content_type_machine_name, 
+                                    content_type_human_name, 
+                                    content_type_field_human_name, 
+                                    content_type_field_machine_name, 
+                                    required_field,
+                                    content_type_field_default,
+                                    content_type_field_multiple):
+
+    """Add a text content type field using Selenium. """
 
     if content_type_machine_name is None :
-        print("Cannot add a term to a vocabulary with no name")
+        print("Cannot add a text field to a content type with no name")
         return
     
-    print("Adding content_type_field: ", str(content_type_field))
+    print("Adding content_type_field: ", str(content_type_field_human_name))
 
     driver = webdriver.Chrome()
 
@@ -359,23 +366,99 @@ def add_longtext_content_type_field(content_type_machine_name, content_type_huma
     
     elem = driver.find_element_by_id("edit-label")
     elem.clear()
-    elem.send_keys(content_type_field)
+    elem.send_keys(content_type_field_human_name)
+    elem.send_keys(Keys.TAB)
+    elem.click()
+
+    elem = driver.find_element_by_id("edit-field-name")
+    elem.clear()
+    elem.send_keys(content_type_field_machine_name)
 
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
 
-    assert content_type_field + " | " + current_website_human_name in driver.title
+    assert content_type_field_human_name + " | " + current_website_human_name in driver.title
+
+    if content_type_field_multiple :
+        select = Select(driver.find_element_by_id('edit-cardinality'))
+        select.select_by_visible_text("Unlimited")
 
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
 
-    assert content_type_field + " settings for " + content_type_human_name + " | " + current_website_human_name in driver.title
+    assert content_type_field_human_name + " settings for " + content_type_human_name + " | " + current_website_human_name in driver.title
 
     checkbox = driver.find_element_by_id("edit-required")
     if required_field :
         checkbox.click()
-    else:
-        checkbox.clear()
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    driver.get(current_website_url + "/user/logout")
+
+    driver.close()
+
+def add_file_content_type_field(content_type_machine_name,
+                                content_type_human_name,
+                                content_type_field_human_name,
+                                content_type_field_machine_name,
+                                required_field,
+                                content_type_field_default,
+                                content_type_field_multiple):
+    """Add a file content type field using Selenium. """
+
+    if content_type_machine_name is None :
+        print("Cannot add a file field to a content type with no name")
+        return
+    
+    print("Adding content_type_field: ", str(content_type_field_human_name))
+
+    driver = webdriver.Chrome()
+
+    driver.get(current_website_url + "/user")
+
+    assert "Log in | " + current_website_human_name in driver.title
+    
+    username = driver.find_element_by_id("edit-name")
+    username.clear()
+    username.send_keys(automated_username)
+
+    password = driver.find_element_by_id("edit-pass")
+    password.clear()
+    password.send_keys(automated_password)
+
+    driver.find_element_by_id("edit-submit").click()
+    
+    driver.get(current_website_url + '/admin/structure/types/manage/' + content_type_machine_name + '/fields/add-field')
+    assert "Add field | " + current_website_human_name in driver.title
+
+    select = Select(driver.find_element_by_id('edit-new-storage-type'))
+    select.select_by_visible_text("File")
+    
+    elem = driver.find_element_by_id("edit-label")
+    elem.clear()
+    elem.send_keys(content_type_field_human_name)
+    elem.send_keys(Keys.TAB)
+    elem.click()
+
+    elem = driver.find_element_by_id("edit-field-name")
+    elem.clear()
+    elem.send_keys(content_type_field_machine_name)
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    assert content_type_field_human_name + " | " + current_website_human_name in driver.title
+
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
+    assert content_type_field_human_name + " settings for " + content_type_human_name + " | " + current_website_human_name in driver.title
+
+    checkbox = driver.find_element_by_id("edit-required")
+    if required_field :
+        checkbox.click()
 
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
@@ -469,6 +552,11 @@ def rename_ct_body_field_via_selenium(content_type_machine_name, content_type_hu
 def import_content_type_from_xml_file(current_content_type_file):
     """Take the content type xml filename and automatically create the 
        vocabulary and all it's terms in the "current_website"."""
+    
+    # Need to handle profile content type differently (at least initially)
+    #   /admin/config/people/profile-types
+    # Need to handle panels content type differently (at least initially)
+
     xml_tree = ET.parse(current_content_type_file)
     xml_root = xml_tree.getroot()
     num_xml_elements = len(list(xml_root))
@@ -520,32 +608,85 @@ def import_content_type_from_xml_file(current_content_type_file):
                 ct_body_label = content_type.text
             
             if content_type.tag == "content_type_field" :
-                curr_ct_field_name = None
-                curr_ct_field_type = None
-                curr_ct_field_can_be_null = None
-                curr_ct_field_key = None
-                curr_ct_field_default = None
-                curr_ct_field_extra = None
+                ct_field_type = None
+                ct_field_global_settings = None
+                ct_field_required = None
+                ct_field_name = None
+                ct_field_multiple = None
+                ct_field_db_storage = None
+                ct_field_module = None
+                ct_field_db_columns = None
+                ct_field_active = None
+                ct_field_weight = None
+                ct_field_label = None
+                ct_field_widget_type = None
+                ct_field_widget_settings = None
+                ct_field_display_settings = None
+                ct_field_description = None
+                ct_field_widget_module = None
+                ct_field_widget_active = None
 
                 for field_properties in content_type:
                     if field_properties.tag == "ct_field_name" :
                         ct_field_name = clean_field_name(field_properties.text)
                     if field_properties.tag == "ct_field_type" :
                         ct_field_type = field_properties.text
-                    if field_properties.tag == "ct_field_can_be_null" :
-                        ct_field_can_be_null = field_properties.text
-                        if content_type.text == "YES" :
-                            ct_field_can_be_null = True
+                    if field_properties.tag == "ct_field_required" :
+                        if field_properties.text == "YES" :
+                            ct_field_required = True
                         else :
-                            ct_field_can_be_null = False
+                            ct_field_required = False
                     if field_properties.tag == "ct_field_key" :
                         ct_field_key = field_properties.text
                     if field_properties.tag == "ct_field_default" :
                         ct_field_default = field_properties.text
                     if field_properties.tag == "ct_field_extra" :
                         ct_field_extra = field_properties.text
+                    if field_properties.tag == "ct_field_global_settings" :
+                        ct_field_global_settings = field_properties.text
+                    if field_properties.tag == "ct_field_multiple" :
+                        if field_properties.text == "YES" :
+                            ct_field_multiple = True
+                        else :
+                            ct_field_multiple = False
+                    if field_properties.tag == "ct_field_db_storage" :
+                        ct_field_db_storage = field_properties.text
+                    if field_properties.tag == "ct_field_active" :
+                        ct_field_active = field_properties.text
+                    if field_properties.tag == "ct_field_weight" :
+                        ct_field_weight = field_properties.text
+                    if field_properties.tag == "ct_field_label" :
+                        ct_field_label = field_properties.text
+                    if field_properties.tag == "ct_field_widget_type" :
+                        ct_field_widget_type = field_properties.text
+                    if field_properties.tag == "ct_field_widget_settings" :
+                        ct_field_widget_settings = field_properties.text
+                    if field_properties.tag == "ct_field_display_settings" :
+                        ct_field_display_settings = field_properties.text
+                    if field_properties.tag == "ct_field_description" :
+                        ct_field_description = field_properties.text
+                    if field_properties.tag == "ct_field_widget_module" :
+                        ct_field_widget_module = field_properties.text
+                    if field_properties.tag == "ct_field_widget_active" :
+                        ct_field_widget_active = field_properties.text
 
-                fields.append((ct_field_name, ct_field_type, ct_field_can_be_null, ct_field_key, ct_field_default, ct_field_extra))
+                fields.append((ct_field_name, 
+                               ct_field_type, 
+                               ct_field_required,
+                               ct_field_global_settings,
+                               ct_field_multiple,
+                               ct_field_db_storage,
+                               ct_field_module,
+                               ct_field_db_columns,
+                               ct_field_active,
+                               ct_field_weight,
+                               ct_field_label,
+                               ct_field_widget_type,
+                               ct_field_widget_settings,
+                               ct_field_display_settings,
+                               ct_field_description,
+                               ct_field_widget_module,
+                               ct_field_widget_active))
             
         if ct_machine_name not in db_content_types :
             add_content_type_via_selenium(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label)
@@ -562,21 +703,37 @@ def import_content_type_from_xml_file(current_content_type_file):
                 if db_custom_body_label != ct_body_label :
                     rename_ct_body_field_via_selenium(ct_machine_name, ct_human_name, db_custom_body_label, ct_body_label)
 
+
         for field in fields:
             print(field)
 
             curr_ct_field_name = field[0]
             curr_ct_field_type = field[1]
-            curr_ct_field_can_be_null = field[2]
-            curr_ct_field_key = field[3]
-            curr_ct_field_default = field[4]
-            curr_ct_field_extra = field[5]
+            curr_ct_field_required = field[2]
+            curr_ct_field_global_settings = field[3]
+            curr_ct_field_multiple = field[4]
+            curr_ct_field_db_storage = field[5]
+            curr_ct_field_module = field[6]
+            curr_ct_field_db_columns = field[7]
+            curr_ct_field_active = field[8]
+            curr_ct_field_weight = field[9]
+            curr_ct_field_label = field[10]
+            curr_ct_field_widget_type = field[11]
+            curr_ct_field_widget_settings = field[12]
+            curr_ct_field_display_settings = field[13]
+            curr_ct_field_description = field[14]
+            curr_ct_field_widget_module = field[15]
+            curr_ct_field_widget_active = field[16]
 
             if not ct_field_exists(ct_machine_name, curr_ct_field_name) :
-                print("Need to add fields here... - Field Name needs to be human readable (not machine)")
+                # Need to add fields here...
                 # Text (formatted, long)
-                if curr_ct_field_type == "longtext":
-                    add_longtext_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_name, not curr_ct_field_can_be_null, curr_ct_field_default)
+                if curr_ct_field_type == "text":
+                    add_text_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_label, curr_ct_field_name, curr_ct_field_required, "", curr_ct_field_multiple)
+                
+                if curr_ct_field_type == "filefield":
+                    add_file_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_label, curr_ct_field_name, curr_ct_field_required, "", curr_ct_field_multiple)
+                
                 num_fields_added += 1
 
         if num_fields_added % 5 == 5 :
