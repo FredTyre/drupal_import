@@ -204,6 +204,7 @@ def term_not_in_this_vocabulary(taxonomies_in_this_vocabulary, term_name, parent
     """Check to see if the term(term_name) is already in the current website. 
        It uses local memory to speed up the check.
        We gain a performance boost if any of the terms are already in the database."""
+       
     term_name = term_name.strip()
     for term in taxonomies_in_this_vocabulary:
         if term[1] == term_name :
@@ -455,7 +456,7 @@ def prep_file_structure():
 
 prep_file_structure()
 
-debug_output_file = os.path.join(logs_directory, 'debug.log')
+debug_output_file = os.path.join(logs_directory, 'taxonomy_debug.log')
 debug_output_file_handle = open(debug_output_file, mode='w')
 
 current_website_human_name = get_site_name()

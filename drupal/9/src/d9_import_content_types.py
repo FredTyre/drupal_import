@@ -809,7 +809,11 @@ def import_content_type_from_xml_file(current_content_type_file):
                 
                 if curr_ct_field_type == "filefield":
                     add_file_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_label, curr_ct_field_name, curr_ct_field_required, "", curr_ct_field_multiple)
-                
+
+                # if curr_ct_field_type == "content_taxonomy":
+                #     add_taxonomy_content_type_field(ct_machine_name, ct_human_name, curr_ct_field_label, curr_ct_field_name, curr_ct_field_required, "", curr_ct_field_multiple)
+                # Needs to read in the XML taxonomies to determine the correct vid
+                # Unless the export handles it ahead of time, I guess. It could determine the taxonomy link and save it in the XML File.
                 num_fields_added += 1
 
         if num_fields_added % 5 == 5 :
@@ -843,7 +847,7 @@ def prep_file_structure():
 
 prep_file_structure()
 
-debug_output_file = os.path.join(logs_directory, 'debug.log')
+debug_output_file = os.path.join(logs_directory, 'ct_debug.log')
 debug_output_file_handle = open(debug_output_file, mode='w')
 
 current_website_human_name = get_site_name()

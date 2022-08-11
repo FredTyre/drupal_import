@@ -7,5 +7,6 @@ pip install -U wget
 pip install -U selenium
 pip install -U urllib3
 pip install -U webdriver-manager
+pip install -U --only-binary :all: mysqlclient
 xcopy /Y "drivers\chromedriver_win32" "C:\Users\Public\Documents\Python Scripts\BrowserDrivers\chromedriver_win32"
 pause
