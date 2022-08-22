@@ -364,7 +364,7 @@ def import_active_users_from_xml_file():
             num_users_added += 1
 
         if num_users_added % 5 == 0:
-            print(num_users_added + " new users imported.")
+            print(str(num_users_added) + " new users imported.")
             
 
 def prep_file_structure():
