@@ -301,10 +301,13 @@ def import_active_users_from_xml_file():
     current_active_user_file = os.path.join(import_directory, "active_users.xml")
     xml_tree = ET.parse(current_active_user_file)
     xml_root = xml_tree.getroot()
-    num_xml_elements = len(list(xml_root))
+    num_xml_elements = len(list(xml_root))    
+    print(str(num_xml_elements) + " active users in this XML File")
 
-    db_active_usernames = get_active_usernames()
-    num_fields_added = 0
+    db_active_usernames = get_active_usernames()    
+    print(str(len(db_active_usernames)) + " active users in the destination website")
+    
+    num_users_added = 0
     
     for active_users in xml_root:
         user_name = None
@@ -322,7 +325,6 @@ def import_active_users_from_xml_file():
         user_data = None
         user_changed = None
         
-        fields = []
         for active_user in active_users:
             
             if active_user.tag == "name" :
@@ -358,8 +360,11 @@ def import_active_users_from_xml_file():
                 user_changed = active_user.text
 
         if user_name not in db_active_usernames:
-            print(db_active_usernames)
             add_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed)
+            num_users_added += 1
+
+        if num_users_added % 5 == 0:
+            print(num_users_added + " new users imported.")
             
 
 def prep_file_structure():
