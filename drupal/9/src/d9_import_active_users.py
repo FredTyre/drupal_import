@@ -360,10 +360,11 @@ def import_active_users_from_xml_file():
                 user_changed = active_user.text
 
         if user_name not in db_active_usernames:
+            print("Adding new user: " + user_name + " email: " + user_email)
             add_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed)
             num_users_added += 1
 
-        if num_users_added % 5 == 0:
+        if num_users_added > 0 and num_users_added % 5 == 0:
             print(str(num_users_added) + " new users imported.")
             
 
