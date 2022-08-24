@@ -185,14 +185,20 @@ def create_machine_readable_name(non_machine_readable_name):
 
     return return_string
 
-def add_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed):
+def dropdown_version_of(user_timezone):
+    if user_timezone == "America/Chicago":
+        return "Chicago"
+            
+    return user_timezone
+
+def add_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed, user_roles):
     if not user_status:
         print("We only add active users!")
         return
     
-    add_user_via_selenium(user_name, user_email, user_timezone)
+    add_user_via_selenium(user_name, user_email, user_timezone, user_roles)
 
-def add_user_via_selenium(user_name, user_email, user_timezone):
+def add_user_via_selenium(user_name, user_email, user_timezone, user_roles):
     """Add a new user to the "current_website" using Selenium (assuming its a drupal 9 site). """
 
     if user_name is None :
@@ -241,14 +247,87 @@ def add_user_via_selenium(user_name, user_email, user_timezone):
     if user_timezone is None or user_timezone == "None":
         select.select_by_visible_text("- None selected -")
     else:
-        select.select_by_visible_text(user_timezone)
-        
+        converted_timezone = dropdown_version_of(user_timezone)
+        select.select_by_visible_text(converted_timezone)
+
+    if user_roles.strip() is not None:
+        for curr_user_role in user_roles.split(','):
+            curr_elem_name = "edit roles " + curr_user_role
+            curr_elem_name = curr_elem_name.lower()
+            curr_elem_name = curr_elem_name.replace(' ', '-')
+            elem = driver.find_element_by_id(curr_elem_name)
+            elem.click()
+    
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
     
     driver.get(current_website_url + "/user/logout")
 
     driver.close()
+
+def get_db_user_data_from_uid(curr_username):
+    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    cursor = conn.cursor()
+
+    uid_records = []
+    get_sql = "SELECT uid, name, mail, timezone, created, changed, access, login, init "
+    get_sql += "FROM users_field_data "
+    get_sql += "WHERE name = '" + str(curr_username) + "' "
+    debug_output_file_handle.write("get_db_user_data_from_uid sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(get_sql)
+    uid_records = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    user_data_record = []
+    for uid_record in uid_records:
+        user_data_record = uid_record
+
+    return user_data_record
+    
+def verify_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed, user_roles):
+    user_updated = False
+
+    if user_name is None:
+        return False
+
+    curr_user_data = []
+    curr_user_data = get_db_user_data_from_uid(user_name)
+
+    curr_db_uid = curr_user_data[0]
+    curr_db_user_name = curr_user_data[1]
+    curr_db_user_email = curr_user_data[2]
+    curr_db_user_timezone = curr_user_data[3]
+    curr_db_user_created = curr_user_data[4]
+    curr_db_user_changed = curr_user_data[5]
+    curr_db_user_access = curr_user_data[6]
+    curr_db_user_login = curr_user_data[7]
+    curr_db_user_init = curr_user_data[8]
+    curr_db_users_roles = get_users_roles(curr_db_uid)
+
+    if curr_db_user_email != user_email:
+        print("curr_db_user_email != user_email")
+    
+    if curr_db_user_timezone != user_timezone:
+        print("curr_db_user_timezone != user_timezone")
+        
+    if curr_db_user_created != user_created:
+        print("curr_db_user_created != user_created")
+        
+    if curr_db_user_changed != user_changed:
+        print("curr_db_user_changed != user_changed")
+        
+    if curr_db_user_access != user_access:
+        print("curr_db_user_access != user_access")
+        
+    if curr_db_user_login != user_login:
+        print("curr_db_user_login != user_login")
+        
+    if curr_db_users_roles != user_roles:
+        print("curr_db_users_roles != user_roles")
+    
+    return user_updated
 
 def get_active_usernames():
     conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
@@ -294,6 +373,40 @@ def get_active_users():
     
     return users
 
+def get_users_roles(curr_user_id):
+    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    cursor = conn.cursor()
+
+    user_role_records = []
+    get_sql = "SELECT config.data "
+    get_sql += "FROM users_field_data, user__roles, config "
+    get_sql += "WHERE users_field_data.uid = user__roles.entity_id "
+    get_sql += "AND users_field_data.uid  = " + str(curr_user_id) + " "
+    get_sql += "AND config.name = CONCAT('user.role.', roles_target_id)"
+    get_sql += "ORDER BY user__roles.delta, roles_target_id, user__roles.entity_id"
+    debug_output_file_handle.write("get_users_roles sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(get_sql)
+    user_role_records = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    users_roles = []
+    for user_role_record in user_role_records:
+        users_roles.append(drupal_9_json_get_key(user_role_record[0], "label"))
+
+    return users_roles
+    
+def get_users_roles_csv(debug_output_file_handle, curr_user_id):
+    str_csv_users_roles = ""
+
+    user_role_records = get_users_roles(debug_output_file_handle, curr_user_id)
+    
+    for user_role_record in user_role_records:
+        str_csv_users_roles += "," + str(user_role_record)
+        
+    return str_csv_users_roles.strip(',')
+
 def import_active_users_from_xml_file():
     """Take the content type xml filename and automatically create the 
        vocabulary and all it's terms in the "current_website"."""
@@ -308,6 +421,7 @@ def import_active_users_from_xml_file():
     print(str(len(db_active_usernames)) + " active users in the destination website")
     
     num_users_added = 0
+    num_users_updated = 0
     
     for active_users in xml_root:
         user_name = None
@@ -324,6 +438,7 @@ def import_active_users_from_xml_file():
         user_init = None
         user_data = None
         user_changed = None
+        user_roles = None
         
         for active_user in active_users:
             
@@ -358,14 +473,22 @@ def import_active_users_from_xml_file():
                 user_data = active_user.text
             if active_user.tag == "changed" :
                 user_changed = active_user.text
+            if active_user.tag == "roles" :
+                user_roles = active_user.text
 
         if user_name not in db_active_usernames:
             print("Adding new user: " + user_name + " email: " + user_email)
-            add_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed)
+            add_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed, user_roles)
             num_users_added += 1
-
+        else:
+            if verify_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed, user_roles):
+                num_users_updated += 1
+            
         if num_users_added > 0 and num_users_added % 5 == 0:
             print(str(num_users_added) + " new users imported.")
+            
+        if num_users_updated > 0 and num_users_updated % 5 == 0:
+            print(str(num_users_updated) + " users updated.")
             
 
 def prep_file_structure():
