@@ -285,6 +285,39 @@ def get_db_user_data_from_uid(curr_username):
         user_data_record = uid_record
 
     return user_data_record
+
+
+def update_user_data_in_db(user_uid, user_created = None, user_changed = None, user_access = None, user_login = None):
+    """Update the user statistical information to be the same as the current website (last login, created date, etc."""
+
+    if user_uid is None:
+        print("update_user_data_in_db: UID must equal the users id that needs the update.")
+        return
+
+    if user_created is None and user_changed is None and user_access is None and user_login is None:
+        print("update_user_data_in_db: Nothing to update. We need at least one field to update.")
+        return
+    
+    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    cursor = conn.cursor()
+    
+    update_sql = "UPDATE users_field_data SET "
+    if user_created is not None:
+        update_sql += " created = " + str(user_created) + ","
+    if user_changed is not None:
+        update_sql += " changed = " + str(user_changed) + ","
+    if user_changed is not None:
+        update_sql += " access = " + str(user_access) + ","
+    if user_changed is not None:
+        update_sql += " login = " + str(user_login) + ","
+    update_sql = update_sql.strip(",")
+    update_sql += " WHERE uid = " + str(user_uid)
+        
+    debug_output_file_handle.write("update_user_data_in_db sql statement: " + str(update_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(update_sql)
+    cursor.close()
+    conn.close()
     
 def verify_user(user_name, user_email, user_theme, user_signature, user_sig_format, user_created, user_access, user_login, user_status, user_timezone, user_language, user_init, user_data, user_changed, user_roles):
     user_updated = False
@@ -311,21 +344,21 @@ def verify_user(user_name, user_email, user_theme, user_signature, user_sig_form
     
     if curr_db_user_timezone != user_timezone:
         print("curr_db_user_timezone != user_timezone")
-        
-    if curr_db_user_created != user_created:
-        print("curr_db_user_created != user_created")
-        
-    if curr_db_user_changed != user_changed:
-        print("curr_db_user_changed != user_changed")
-        
-    if curr_db_user_access != user_access:
-        print("curr_db_user_access != user_access")
-        
-    if curr_db_user_login != user_login:
-        print("curr_db_user_login != user_login")
-        
+
     if curr_db_users_roles != user_roles:
         print("curr_db_users_roles != user_roles")
+            
+    if curr_db_user_created != user_created or curr_db_user_changed != user_changed or curr_db_user_access != user_access or curr_db_user_login != user_login:
+        if curr_db_user_created != user_created :
+            print("curr_db_user_created != user_created ... updating database to ... " + user_created)
+        if curr_db_user_changed != user_changed:
+            print("curr_db_user_changed != user_changed ... updating database to ... " + user_changed)
+        if curr_db_user_access != user_access:
+            print("curr_db_user_access != user_access ... updating database to ... " + user_access)
+        if curr_db_user_login != user_login:
+            print("curr_db_user_login != user_login ... updating database to ... " + user_login)
+        
+        update_user_data_in_db(curr_db_uid, user_created, user_changed, user_access, user_login)
     
     return user_updated
 
