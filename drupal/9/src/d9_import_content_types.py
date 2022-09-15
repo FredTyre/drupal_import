@@ -123,12 +123,17 @@ def flush_print_files():
     """Write any data stored in memory to the file(debug_output_file_handle)."""
 
     debug_output_file_handle.flush()
-
+    
 def drupal_9_json_get_key(json_string, json_key):
     """drupal 9 does JSON differently than python does, apparently. 
        Find the json_key in json_string and return it's value."""
 
     str_json_string = str(json_string)
+    index_of_json_key = str_json_string.find(json_key)
+    
+    if(index_of_json_key < 0):
+        return ""
+
     return_string = str_json_string[str_json_string.find(json_key):]
     return_string = return_string.replace(';', ':')
     return_string_array = return_string.split(':')
@@ -327,12 +332,12 @@ def add_content_type_via_selenium(ct_machine_name, ct_human_name, ct_module, ct_
     driver.close()
 
 def add_text_content_type_field(content_type_machine_name, 
-                                    content_type_human_name, 
-                                    content_type_field_human_name, 
-                                    content_type_field_machine_name, 
-                                    required_field,
-                                    content_type_field_default,
-                                    content_type_field_multiple):
+                                content_type_human_name, 
+                                content_type_field_human_name, 
+                                content_type_field_machine_name, 
+                                required_field,
+                                content_type_field_default,
+                                content_type_field_multiple):
 
     """Add a text content type field using Selenium. """
 
@@ -362,7 +367,7 @@ def add_text_content_type_field(content_type_machine_name,
     assert "Add field | " + current_website_human_name in driver.title
 
     select = Select(driver.find_element_by_id('edit-new-storage-type'))
-    select.select_by_visible_text("Text (formatted, long, with summary)")
+    select.select_by_visible_text("Text (formatted)")
     
     elem = driver.find_element_by_id("edit-label")
     elem.clear()
@@ -743,6 +748,9 @@ def import_content_type_from_xml_file(current_content_type_file):
                     if field_properties.tag == "ct_field_widget_active" :
                         ct_field_widget_active = field_properties.text
 
+                if ct_field_label is None or ct_field_label == "":
+                    ct_field_label = drupal_9_json_get_key(ct_field_global_settings, "label")
+                    
                 fields.append((ct_field_name, 
                                ct_field_type, 
                                ct_field_required,
@@ -761,7 +769,7 @@ def import_content_type_from_xml_file(current_content_type_file):
                                ct_field_widget_module,
                                ct_field_widget_active))
             
-        if ct_machine_name not in db_content_types :
+        if ct_machine_name not in db_content_types and ct_human_name is not None :
             add_content_type_via_selenium(ct_machine_name, ct_human_name, ct_module, ct_description, ct_help, ct_has_title, ct_title_label)
             num_fields_added += 2
             db_content_types = get_content_types()
