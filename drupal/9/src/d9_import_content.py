@@ -144,6 +144,16 @@ def clean_field_name(str_field_name):
     
     return str_field_name
 
+def ct_filename_to_ct(directory, filename):
+    return_content_type = filename
+    
+    return_content_type = return_content_type.replace(directory, "")
+    return_content_type = return_content_type.replace("ct_data_", "")
+    return_content_type = return_content_type.replace(".xml", "")
+    return_content_type = re.sub("\\\\", "", return_content_type)
+    
+    return return_content_type
+
 def get_site_name():
     """Look up the human readable name of the website in the drupal database.
        Used to verify we are at the correct website when adding new content via Selenium."""
@@ -171,6 +181,66 @@ def get_site_name():
     
     return return_string
 
+def uploadListingPhotos(outputDirectory, newNodeId, newNodeTitle, oldPhotoList):
+    if(oldPhotoList is None):
+        return
+
+    driver = webdriver.Chrome()
+
+    driver.get(newSiteURL + "/user")
+
+    assert "Login | " + siteHumanName in driver.title
+    
+    username = driver.find_element_by_id("edit-name")
+    username.clear()
+    username.send_keys(seleniumUsername)
+
+    password = driver.find_element_by_id("edit-pass")
+    password.clear()
+    password.send_keys(seleniumPassword)
+
+    driver.find_element_by_id("edit-submit").click()
+    
+    driver.get(newSiteURL + '/node/' + str(newNodeId) + '/edit')
+    assert "Edit Aircraft Listing " + str(newNodeTitle) + " | " + siteHumanName in driver.title
+
+    driver.find_element_by_css_selector(".group-aircraft-media").click()
+
+    uploadFilesLocation = imagesFolder
+    uploadFileList = oldPhotoList.replace("/", uploadFilesLocation)
+    
+    oldPhotos = uploadFileList.split(', ')
+    counter = 0
+    for oldPhoto in oldPhotos:
+        
+        if(oldPhoto is None or oldPhoto == uploadFilesLocation):
+            continue
+        
+        if(not path.exists(oldPhoto) and oldPhoto.find("/") == -1):
+            oldPhoto = "/" + oldPhoto
+            oldPhoto = oldPhoto.replace("/", uploadFilesLocation)
+        
+        if(not path.exists(oldPhoto)):
+            print("photo does not exist:", oldPhoto)
+            continue
+        
+        elem = driver.find_element_by_id("edit-field-listing-image-und-" + str(counter) + "-upload")
+        elem.send_keys(oldPhoto)
+
+        driver.find_element_by_id("edit-field-listing-image-und-" + str(counter) + "-upload-button").click()
+        time.sleep(10)
+        
+        counter += 1
+        
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+    
+    driver.get(newSiteURL + "/user/logout")
+
+    driver.close()
+
+    changeNodeUsersToAnonymous(newDBInfoAlias)
+    
 def get_content_types():
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
 
@@ -299,9 +369,9 @@ def create_machine_readable_name(non_machine_readable_name):
 
     return return_string
 
-def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None):
+def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_username=None):
     """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
-    if ct_has_title and ct_title is None :
+    if ct_has_title and ct_title != "" and ct_title is not None:
         print("Cannot add this without a Title - content type:" + content_type)
         return
     
@@ -321,41 +391,32 @@ def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None):
 
     driver.find_element_by_id("edit-submit").click()
     
-    driver.get(current_website_url + '/admin/structure/types/add')
-    assert "Add content type | " + current_website_human_name in driver.title
+    driver.get(current_website_url + '/node/add/' + content_type)
+    # assert "Add content type | " + current_website_human_name in driver.title
 
-    elem = driver.find_element_by_id("edit-name")
-    elem.clear()
-    elem.send_keys(ct_human_name)
-    elem.send_keys(Keys.TAB)
-
-    elem = driver.find_element_by_id("edit-type")
-    elem.clear()
-    elem.send_keys(ct_machine_name)
-
-    if ct_description is not None:
-        elem = driver.find_element_by_id("edit-description")
+    if ct_has_title and ct_title != "" and ct_title is not None:
+        print("entering title: " + ct_title)
+        elem = driver.find_element_by_id("edit-title-0-value")
         elem.clear()
-        elem.send_keys(ct_description)
+        elem.send_keys(ct_title)
 
-    if ct_has_title and ct_title_label != "Title" and ct_title_label is not None:
-        elem = driver.find_element_by_id("edit-title-label")
-        elem.clear()
-        elem.send_keys(ct_title_label)
-
-    if ct_help is not None:
-        elem = driver.find_element_by_id("edit-help")
-        elem.clear()
-        elem.send_keys(ct_help)
-
-    elem = driver.find_element_by_id("edit-save-continue")
-    elem.click()
+    if ct_username != "" and ct_username is not None:
+        print("entering author info: " + ct_username)
+        
+        driver.find_element_by_id("edit-author").click()
+        time.sleep(10)
     
+        elem = driver.find_element_by_id("edit-uid-0-target-id")
+        elem.send_keys(ct_username)
+        
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+
     driver.get(current_website_url + "/user/logout")
 
     driver.close()
 
-def import_content_from_xml_file(current_content_file):
+def import_content_from_xml_file(import_directory, current_content_file):
     """Take the content xml filename and automatically create the 
        content in the "current_website"."""
     
@@ -363,20 +424,31 @@ def import_content_from_xml_file(current_content_file):
     xml_root = xml_tree.getroot()
     num_xml_elements = len(list(xml_root))
 
-    db_ct_data_records = get_content()
-    num_fields_added = 0
+    content_type_name = ct_filename_to_ct(import_directory, current_content_file)
+    
+    db_ct_data_records = get_content(content_type_name)
+    num_records_added = 0
     
     for ct_data_records in xml_root:
         ct_title = None
         
         fields = []
-        for ct_data_records in ct_data_records:
+        for ct_data_record in ct_data_records:
             
-            if ct_data_records.tag == "title" :
-                ct_title = content_type.text
+            if ct_data_record.tag == "title" :
+                ct_title = ct_data_record.text
 
+            if ct_data_record.tag == "user_name" :
+                ct_user_name = ct_data_record.text
+
+            if ct_title is None or ct_title == "":
+                ct_has_title = False
+            else:
+                ct_has_title = True
+                
+            add_content_via_selenium(content_type_name, ct_has_title, ct_title)
             
-                num_records_added += 1
+            num_records_added += 1
 
         if num_records_added % 5 == 5 :
             print(str(num_records_added) + " have been added to the content type " + ct_human_name + ".")
@@ -385,10 +457,10 @@ def import_content_files():
     """Import all the content files in "import_directory"."""
     files_to_import = os.listdir(import_directory)
     for content_filename in files_to_import:
-        if fnmatch.fnmatch(content_filename, 'content_type_data_*.xml'):
+        if fnmatch.fnmatch(content_filename, 'ct_data_*.xml'):
             print("Found a content type to import: " + content_filename)
             current_content_file = os.path.join(import_directory, content_filename)
-            import_content_from_xml_file(current_content_file)
+            import_content_from_xml_file(import_directory, current_content_file)
 
 def prep_file_structure():
     """Ensures that all of the necessary file folders exist."""
