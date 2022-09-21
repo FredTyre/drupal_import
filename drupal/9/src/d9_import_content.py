@@ -240,6 +240,31 @@ def uploadListingPhotos(outputDirectory, newNodeId, newNodeTitle, oldPhotoList):
     driver.close()
 
     changeNodeUsersToAnonymous(newDBInfoAlias)
+
+def mysql_gen_select_statement(column_names, from_tables, where_clause = None, order_by = None, groupby = None):
+    return_sql = "SELECT "
+    for column_name in column_names:
+        return_sql += str(column_name) + ", "
+    return_sql = return_sql.strip(", ")
+    
+    return_sql += " FROM "
+    for table_name in from_tables:
+        return_sql += str(table_name) + ", "
+    return_sql = return_sql.strip(", ")
+    
+    if where_clause is not None:
+        return_sql += " WHERE " + where_clause
+        
+    if order_by is not None:
+        return_sql += " ORDER BY " + order_by
+        
+    if groupby is not None:
+        return_sql += " GROUP BY " + groupby
+
+    return return_sql
+        
+def mysql_add_left_join_on(content_type, left_table_name, right_table_name):
+    return "LEFT JOIN " + right_table_name + " ON " + left_table_name + ".nid = " + right_table_name + ".entity_id AND " + right_table_name + ".bundle = '" + content_type + "' AND " + right_table_name + ".deleted = 0 AND " + right_table_name + ".langcode = 'en' "
     
 def get_content_types():
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
@@ -270,6 +295,38 @@ def get_content_types():
         
     return content_type_machine_names
 
+def get_ct_field_names(content_type_machine_name):
+    """Query the database of the drupal 9 site to get all of the field names for the specified content type."""
+
+    conn = MySQLdb.connect(host=db_host, 
+                                user=db_user, 
+                                passwd=db_password, 
+                                database=db_database, 
+                                port=db_port)
+    cursor = conn.cursor()
+    
+    get_sql = "SELECT data FROM config WHERE name LIKE 'field.field.node." + content_type_machine_name + ".%'"
+    
+    debug_output_file_handle.write("get_ct_field_names sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(get_sql)
+    field_data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    field_names = []
+    
+    for field_record in field_data:
+        data_field = field_record[0]
+        
+        field_name = drupal_9_json_get_key(data_field, "field_name")
+        field_type = drupal_9_json_get_key(data_field, "field_type")
+        
+        if field_name is not None:
+            field_names.append((field_name, field_type))
+        
+    return field_names
+    
 def get_content(content_type_machine_name):
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
 
@@ -279,8 +336,71 @@ def get_content(content_type_machine_name):
                                 database=db_database, 
                                 port=db_port)
     cursor = conn.cursor()
+
+    field_names = get_ct_field_names(content_type_machine_name)
+
+    get_sql = "SELECT node.nid, node.vid, node.type, node.uuid "
+
+    # need to know the field type to pick column names correctly in the sql
+    for field_data in field_names:
+        (field_name, field_type) = field_data
+        if field_name == "body":
+            right_table_name = "node__body"
+            get_sql += ", " + right_table_name + ".body_format, " + right_table_name + ".body_summary, " + right_table_name + ".body_value "
+        elif field_name == "comment":
+            right_table_name = "node__comment"
+            get_sql += ", " + right_table_name + ".comment_satus "
+        else:
+            right_table_name = "node__" + field_name
+            
+            if field_type == "taxonomy_term_reference":
+                get_sql += ", " + right_table_name + "." + field_name + "_tid "
+            elif field_type == "image":
+                get_sql += ", " + right_table_name + "." + field_name + "_target_id "
+                get_sql += ", " + right_table_name + "." + field_name + "_description "
+                get_sql += ", " + right_table_name + "." + field_name + "_display "
+            elif field_type == "file":
+                get_sql += ", " + right_table_name + "." + field_name + "_target_id "
+                get_sql += ", " + right_table_name + "." + field_name + "_description "
+                get_sql += ", " + right_table_name + "." + field_name + "_display "
+            elif field_type == "entityreference":
+                get_sql += ", " + right_table_name + "." + field_name + "_target_id "
+            elif field_type == "addressfield":
+                get_sql += ", " + right_table_name + "." + field_name + "_organisation_name "
+                get_sql += ", " + right_table_name + "." + field_name + "_first_name "
+                get_sql += ", " + right_table_name + "." + field_name + "_last_name "
+                get_sql += ", " + right_table_name + "." + field_name + "_thoroughfare " + curr_field_name + "_address_1 "
+                get_sql += ", " + right_table_name + "." + field_name + "_locality " + curr_field_name + "_city "
+                get_sql += ", " + right_table_name + "." + field_name + "_administrative_area " + curr_field_name + "_state "
+                get_sql += ", " + right_table_name + "." + field_name + "_country "
+                get_sql += ", " + right_table_name + "." + field_name + "_postal_code "
+            elif field_type == "link_field":
+                get_sql += ", " + right_table_name + "." + field_name + "_url "
+                get_sql += ", " + right_table_name + "." + field_name + "_title "
+            elif field_type == "email":
+                get_sql += ", " + right_table_name + "." + field_name + "_email "
+            elif field_type == "text_with_summary" :
+                get_sql += ", " + right_table_name + "." + field_name + "_value "
+                get_sql += ", " + right_table_name + "." + field_name + "_summary "
+                get_sql += ", " + right_table_name + "." + field_name + "_format "
+            else:
+                get_sql += ", " + right_table_name + "." + field_name + "_value "
+        
+    get_sql += "FROM node "
     
-    get_sql = "SELECT * FROM config WHERE name LIKE 'node.type." + content_type_machine_name + "%'"
+    for field_data in field_names:
+        (field_name, field_type) = field_data
+        if field_name == "body":
+            right_table_name = "node__body"
+        elif field_name == "comment":
+            right_table_name = "node__comment"
+        else:
+            right_table_name = "node__" + field_name
+
+        get_sql += mysql_add_left_join_on(content_type_machine_name, "node", right_table_name)
+        
+    get_sql += "WHERE node.type = '" + content_type_machine_name + "' "
+    get_sql += "AND node.langcode = 'en' "
     
     debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
     debug_output_file_handle.flush()
@@ -371,7 +491,7 @@ def create_machine_readable_name(non_machine_readable_name):
 
 def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_username=None):
     """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
-    if ct_has_title and ct_title != "" and ct_title is not None:
+    if ct_has_title and (ct_title == "" or ct_title is None):
         print("Cannot add this without a Title - content type:" + content_type)
         return
     
@@ -430,7 +550,9 @@ def import_content_from_xml_file(import_directory, current_content_file):
     num_records_added = 0
     
     for ct_data_records in xml_root:
+        ct_has_title = False
         ct_title = None
+        ct_user_name = None
         
         fields = []
         for ct_data_record in ct_data_records:
@@ -445,10 +567,15 @@ def import_content_from_xml_file(import_directory, current_content_file):
                 ct_has_title = False
             else:
                 ct_has_title = True
-                
-            add_content_via_selenium(content_type_name, ct_has_title, ct_title)
+
+        print("content_type_name: " + str(content_type_name))
+        print("ct_has_title: " + str(ct_has_title))
+        print("ct_title: " + str(ct_title))
+        print("ct_user_name: " + str(ct_user_name))
             
-            num_records_added += 1
+        add_content_via_selenium(content_type_name, ct_has_title, ct_title, ct_user_name)
+            
+        num_records_added += 1
 
         if num_records_added % 5 == 5 :
             print(str(num_records_added) + " have been added to the content type " + ct_human_name + ".")
