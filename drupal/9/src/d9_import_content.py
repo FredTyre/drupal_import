@@ -1,14 +1,15 @@
 """This script uses the following Environment Variables to setup a database connection to the
-   drupal 6 website we are attempting to export. When setting the envrionment variables, there
+   drupal 6 website we are attempting to import. When setting the envrionment variables, there
    should not be any double quotes ("). They are used here to only to specify to the reader that
    the text in between double quotes can be used. This information is required for the code to be
    able to export the website's data. See the README.TXT for more information."""
 
 import xml.etree.ElementTree as ET
-import re
+
 import os
 import fnmatch
 import MySQLdb
+import re
 import sshtunnel
 
 from selenium import webdriver
@@ -54,7 +55,7 @@ export_directory = os.path.join(OUTPUT_DIRECTORY, current_website)
 logs_directory = os.path.join(export_directory, LOGS_DIRECTORY)
 
 def remove_empty_lines(string_to_fix, end_line):
-    """Removes any emptyl lines from a string that needs fixing (string_to_fix). 
+    """Removes any empty lines from a string that needs fixing (string_to_fix). 
        end_line is used to find the line endings in the string."""
 
     return_string = ""
@@ -106,11 +107,11 @@ def convert_html(string_to_convert, end_line):
     return_string = ignore_case_replace_space.sub(" ", return_string)
 
     return_string = remove_empty_lines(return_string, end_line)
-    #print('================================================\n')
-    #print(string2Convert)
-    #print('================================================\n')
-    #print(returnString)
-    #print('================================================\n')
+    # print('================================================\n')
+    # print(string2Convert)
+    # print('--------------------------------------\n')
+    # print(returnString)
+    # print('================================================\n')
     
     return return_string.strip()
 
@@ -132,6 +133,15 @@ def drupal_9_json_get_key(json_string, json_key):
     return_string = str_json_string[str_json_string.find(json_key):]
     return_string = return_string.replace(';', ':')
     return_string_array = return_string.split(':')
+
+    if len(return_string_array) < 4 :
+        print("Could not find json_key " + json_key)
+        print()
+        print(json_string)
+        print()
+
+        return ""
+
     return_string = return_string_array[3]
     
     return return_string.strip('"')
@@ -263,11 +273,11 @@ def mysql_gen_select_statement(column_names, from_tables, where_clause = None, o
 
     return return_sql
         
-def mysql_add_left_join_on(content_type, left_table_name, right_table_name):
+def d9_mysql_add_left_join_on(content_type, left_table_name, right_table_name):
     return "LEFT JOIN " + right_table_name + " ON " + left_table_name + ".nid = " + right_table_name + ".entity_id AND " + right_table_name + ".bundle = '" + content_type + "' AND " + right_table_name + ".deleted = 0 AND " + right_table_name + ".langcode = 'en' "
-    
-def get_content_types():
-    """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
+
+def get_content_types(debug_output_file_handle, content_types_to_exclude):
+    """Query the database of the drupal 9 site to get all of the existing content types."""
 
     conn = MySQLdb.connect(host=db_host, 
                                 user=db_user, 
@@ -276,7 +286,7 @@ def get_content_types():
                                 port=db_port)
     cursor = conn.cursor()
     
-    get_sql = "SELECT * FROM config WHERE name LIKE 'node.type.%'"
+    get_sql = "SELECT data FROM config WHERE name LIKE 'node.type.%'"
     
     debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
     debug_output_file_handle.flush()
@@ -288,14 +298,19 @@ def get_content_types():
     content_type_machine_names = []
     
     for content_type in content_types:
-        config_name = content_type[1]
-        content_type_machine_name = config_name.split('.')[2]
-        if content_type_machine_name is not None:
-            content_type_machine_names.append(content_type_machine_name)
+        content_type_machine_name = drupal_9_json_get_key(content_type[0], "type")
+
+        if content_type_machine_name is None :
+            continue
+
+        if content_types_to_exclude is not None and content_type_machine_name in content_types_to_exclude:
+            continue
+
+        content_type_machine_names.append(content_type_machine_name)
         
     return content_type_machine_names
 
-def get_ct_field_names(content_type_machine_name):
+def get_ct_field_names(debug_output_file_handle, content_type_machine_name):
     """Query the database of the drupal 9 site to get all of the field names for the specified content type."""
 
     conn = MySQLdb.connect(host=db_host, 
@@ -327,7 +342,7 @@ def get_ct_field_names(content_type_machine_name):
         
     return field_names
     
-def get_content(content_type_machine_name):
+def get_content(debug_output_file_handle, content_type_machine_name):
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
 
     conn = MySQLdb.connect(host=db_host, 
@@ -337,19 +352,24 @@ def get_content(content_type_machine_name):
                                 port=db_port)
     cursor = conn.cursor()
 
-    field_names = get_ct_field_names(content_type_machine_name)
+    custom_field_names = get_ct_field_names(debug_output_file_handle, curr_content_type)
 
     get_sql = "SELECT node.nid, node.vid, node.type, node.uuid "
+    get_sql += ", node_field_data.title, node_field_data.created, node_field_data.changed, node_field_data.promote, node_field_data.sticky"
 
     # need to know the field type to pick column names correctly in the sql
-    for field_data in field_names:
+    for field_data in custom_field_names:
         (field_name, field_type) = field_data
+        
+        if field_name == "" or field_name is None:
+            continue
+
         if field_name == "body":
             right_table_name = "node__body"
             get_sql += ", " + right_table_name + ".body_format, " + right_table_name + ".body_summary, " + right_table_name + ".body_value "
         elif field_name == "comment":
             right_table_name = "node__comment"
-            get_sql += ", " + right_table_name + ".comment_satus "
+            get_sql += ", " + right_table_name + ".comment_status "
         else:
             right_table_name = "node__" + field_name
             
@@ -357,13 +377,15 @@ def get_content(content_type_machine_name):
                 get_sql += ", " + right_table_name + "." + field_name + "_tid "
             elif field_type == "image":
                 get_sql += ", " + right_table_name + "." + field_name + "_target_id "
-                get_sql += ", " + right_table_name + "." + field_name + "_description "
-                get_sql += ", " + right_table_name + "." + field_name + "_display "
+                # Need to look in config table to determine these fields.
+                #get_sql += ", " + right_table_name + "." + field_name + "_description "
+                #get_sql += ", " + right_table_name + "." + field_name + "_display "
             elif field_type == "file":
                 get_sql += ", " + right_table_name + "." + field_name + "_target_id "
-                get_sql += ", " + right_table_name + "." + field_name + "_description "
-                get_sql += ", " + right_table_name + "." + field_name + "_display "
-            elif field_type == "entityreference":
+                # Need to look in config table to determine these fields.
+                #get_sql += ", " + right_table_name + "." + field_name + "_description "
+                #get_sql += ", " + right_table_name + "." + field_name + "_display "
+            elif field_type == "entity_reference":
                 get_sql += ", " + right_table_name + "." + field_name + "_target_id "
             elif field_type == "addressfield":
                 get_sql += ", " + right_table_name + "." + field_name + "_organisation_name "
@@ -387,9 +409,14 @@ def get_content(content_type_machine_name):
                 get_sql += ", " + right_table_name + "." + field_name + "_value "
         
     get_sql += "FROM node "
+    get_sql += "LEFT JOIN node_field_data ON node.nid = node_field_data.nid AND node_field_data.type = '" + curr_content_type + "' AND node_field_data.langcode = 'en' "
     
-    for field_data in field_names:
+    for field_data in custom_field_names:
         (field_name, field_type) = field_data
+        
+        if field_name == "" or field_name is None:
+            continue
+        
         if field_name == "body":
             right_table_name = "node__body"
         elif field_name == "comment":
@@ -397,27 +424,21 @@ def get_content(content_type_machine_name):
         else:
             right_table_name = "node__" + field_name
 
-        get_sql += mysql_add_left_join_on(content_type_machine_name, "node", right_table_name)
+        get_sql += d9_mysql_add_left_join_on(curr_content_type, "node", right_table_name)
         
-    get_sql += "WHERE node.type = '" + content_type_machine_name + "' "
+    get_sql += "WHERE node.type = '" + curr_content_type + "' "
     get_sql += "AND node.langcode = 'en' "
     
     debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
     debug_output_file_handle.flush()
     cursor.execute(get_sql)
-    content_types = cursor.fetchall()
+    ct_data_records = cursor.fetchall()
     cursor.close()
     conn.close()
 
-    content_type_machine_names = []
+    field_names = [curr_index[0] for curr_index in cursor.description]
     
-    for content_type in content_types:
-        config_name = content_type[1]
-        content_type_machine_name = config_name.split('.')[2]
-        if content_type_machine_name is not None:
-            content_type_machine_names.append(content_type_machine_name)
-        
-    return content_type_machine_names
+    return (field_names, ct_data_records)
 
 def ct_field_exists(ct_machine_name, ct_field_name="body"):
     """Return true if the database has a field (ct_field_name) for content type ct_machine_name"""
