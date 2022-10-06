@@ -549,7 +549,7 @@ def create_machine_readable_name(non_machine_readable_name):
 
     return return_string
 
-def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_username=None):
+def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_username=None, dict_ct_data_record_in_xml=None):
     """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
     if ct_has_title and (ct_title == "" or ct_title is None):
         debug_output_file_handle.write("Cannot add this without a Title - content type:" + content_type)
@@ -581,14 +581,30 @@ def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_
         elem.send_keys(ct_title)
 
     if ct_username != "" and ct_username is not None:
-        debug_output_file_handle.write("entering author info: " + ct_username)
+        debug_output_file_handle.write("entering author info: " + ct_username + ENDL)
         
         driver.find_element_by_id("edit-author").click()
         time.sleep(10)
     
         elem = driver.find_element_by_id("edit-uid-0-target-id")
         elem.send_keys(ct_username)
-        
+
+    if dict_ct_data_record_in_xml is not None:
+        for field_name in dict_ct_data_record_in_xml:
+            
+            field_type = get_field_type(content_type, field_name)
+            if field_type is None:
+                continue
+            
+            if field_type == "link" :
+                field_data = str(dict_ct_data_record_in_xml[field_name])
+                elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-0-uri")
+                elem.clear()
+                debug_output_file_handle.write("entering " + str(field_name) + ":" + field_data + ENDL)
+                elem.send_keys(field_data)
+            
+            debug_output_file_handle.write("The field type for " + str(field_name) + " is " + str(field_type) + ENDL)
+	
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
 
@@ -704,7 +720,10 @@ def compare_xml_to_db_data_and_fix(content_type, dict_ct_data_record_in_xml, dic
             continue
 
         field_type = get_field_type(content_type, field_name)
-        
+
+        if field_type is None:
+            continue
+            
         if field_name not in dict_ct_data_records_in_db.keys():
             add_new_data = True
         elif str(dict_ct_data_record_in_xml[field_name]) != str(dict_ct_data_records_in_db[field_name]):
@@ -764,17 +783,14 @@ def import_content_from_xml_file(import_directory, current_content_file):
             field_names_in_xml.append(ct_data_record.tag)
             curr_ct_data_record_in_xml[ct_data_record.tag] = ct_data_record.text
 
-        debug_output_file_handle.write("content_type_name: " + str(content_type_name))
-        debug_output_file_handle.write("ct_has_title: " + str(ct_has_title))
-        debug_output_file_handle.write("ct_title: " + str(ct_title))
-        debug_output_file_handle.write("ct_user_name: " + str(ct_user_name))
+        debug_output_file_handle.write("content_type_name: " + str(content_type_name) + ENDL)
+        debug_output_file_handle.write("ct_has_title: " + str(ct_has_title) + ENDL)
+        debug_output_file_handle.write("ct_title: " + str(ct_title) + ENDL)
+        debug_output_file_handle.write("ct_user_name: " + str(ct_user_name) + ENDL)
 
         (curr_field_names_in_db, curr_ct_data_record_in_db) = get_content(content_type_name, ct_title=ct_title)
 
-        if curr_ct_data_record_in_db is None or len(curr_ct_data_record_in_db) <= 0:
-            add_content_via_selenium(content_type_name, ct_has_title, ct_title, ct_user_name)
-
-        # convert curr_ct_data_record_in_db information to a dictionary (should have done that originally?)
+        # convert curr_ct_data_record_in_db information to a dictionary
         
         dict_ct_data_records = {}
         for this_curr_ct_data_record_in_db in curr_ct_data_record_in_db:
@@ -786,7 +802,11 @@ def import_content_from_xml_file(import_directory, current_content_file):
 
         #debug_output_file_handle.write("xml data in dictionary form: " + str(curr_ct_data_record_in_xml))
         #debug_output_file_handle.write("db data in dictionary form: " + str(dict_ct_data_records))
+
         
+        if curr_ct_data_record_in_db is None or len(curr_ct_data_record_in_db) <= 0:
+            add_content_via_selenium(content_type_name, ct_has_title, ct_title, ct_user_name, curr_ct_data_record_in_xml)
+            
         compare_xml_to_db_data_and_fix(content_type_name, curr_ct_data_record_in_xml, dict_ct_data_records)
         
         num_records_added += 1
