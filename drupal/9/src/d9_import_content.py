@@ -7,16 +7,24 @@
 import xml.etree.ElementTree as ET
 
 import os
+import time
 import fnmatch
 import MySQLdb
 import re
 import sshtunnel
+import argparse
+import configparser
+
+from datetime import datetime
 
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 
 INPUT_DIRECTORY = 'input'
+CONFIG_DIRECTORY = 'config'
+FILES_DIRECTORY = 'files'
+XML_DIRECTORY = 'xml'
 OUTPUT_DIRECTORY = 'output'
 LOGS_DIRECTORY = 'logs'
 
@@ -51,8 +59,40 @@ ignore_case_replace_letters = re.compile("[a-z]+", re.IGNORECASE)
 ignore_case_replace_period = re.compile("[\.]+", re.IGNORECASE)
 
 import_directory = os.path.join(INPUT_DIRECTORY, current_website)
+config_directory = os.path.join(import_directory, CONFIG_DIRECTORY)
+files_directory = os.path.join(import_directory, FILES_DIRECTORY)
+xml_directory = os.path.join(import_directory, XML_DIRECTORY)
 export_directory = os.path.join(OUTPUT_DIRECTORY, current_website)
 logs_directory = os.path.join(export_directory, LOGS_DIRECTORY)
+
+def dictonary_has_key(dictionary, key_to_check):
+    for key, value in dictionary.items():
+        if str(key) == str(key_to_check):
+            return True
+    return False
+        
+def ends_with(haystack, needle):
+    length_of_needle = len(needle)
+
+    if length_of_needle > len(haystack):
+        return False
+    
+    if haystack[-length_of_needle:] == needle :
+        return True
+
+    return False
+        
+def csvStringToList(csvString, separator):
+    if csvString is None or csvString =="" :
+        return []
+
+    csvArray = csvString.split(separator)
+
+    returnList = []
+    for currField in csvArray:
+        returnList.append(currField)
+
+    return returnList
 
 def remove_empty_lines(string_to_fix, end_line):
     """Removes any empty lines from a string that needs fixing (string_to_fix). 
@@ -149,6 +189,9 @@ def drupal_9_json_get_key(json_string, json_key):
 
         return ""
 
+    if return_string_array[1] == "b":
+        return return_string_array[2]
+    
     return_string = return_string_array[3]
     
     return return_string.strip('"')
@@ -171,7 +214,7 @@ def ct_filename_to_ct(directory, filename):
     
     return return_content_type
 
-def execute_and_commit_sql(sql_to_execute):
+def execute_and_commit_sql(debug_output_file_handle, sql_to_execute):
 
     conn = MySQLdb.connect(host=db_host, 
                            user=db_user, 
@@ -188,7 +231,7 @@ def execute_and_commit_sql(sql_to_execute):
     conn.commit()
     conn.close()
     
-def get_site_name():
+def get_site_name(debug_output_file_handle):
     """Look up the human readable name of the website in the drupal database.
        Used to verify we are at the correct website when adding new content via Selenium."""
 
@@ -334,7 +377,7 @@ def get_content_types(content_types_to_exclude):
         
     return content_type_machine_names
 
-def get_ct_field_names(content_type_machine_name):
+def get_ct_field_names(debug_output_file_handle, content_type_machine_name):
     """Query the database of the drupal 9 site to get all of the field names for the specified content type."""
 
     conn = MySQLdb.connect(host=db_host, 
@@ -359,23 +402,35 @@ def get_ct_field_names(content_type_machine_name):
         data_field = field_record[0]
         
         field_name = drupal_9_json_get_key(data_field, "field_name")
-        field_type = drupal_9_json_get_key(data_field, "field_type")
+        if field_name is None:
+            continue
         
-        if field_name is not None:
-            field_names.append((field_name, field_type))
+        field_type = drupal_9_json_get_key(data_field, "field_type")
+        field_required = drupal_9_json_get_key(data_field, "required")
+        
+        #print(field_name)        
+        #print(field_type)
+        #print(field_required)
+        
+        field_names.append((field_name, field_type, field_required))
         
     return field_names
 
-def get_field_type(curr_content_type, curr_fieldname):
-    custom_field_names = get_ct_field_names(curr_content_type)
+def get_field_type(debug_output_file_handle, curr_content_type, curr_fieldname):
+    custom_field_names = get_ct_field_names(debug_output_file_handle, curr_content_type)
+    #print(custom_field_names)
     for field_data in custom_field_names:
-        (field_name, field_type) = field_data
+        (field_name, field_type, field_required) = field_data
+        #print(field_name)        
+        #print(field_type)
+        #print(field_required)
+        #print('"' + field_name + '" ?=? "' + curr_fieldname + '"')
         if field_name == curr_fieldname:
             return field_type
         
     return None
 
-def get_content(curr_content_type, ct_title=None):
+def get_content(debug_output_file_handle, curr_content_type, ct_title=None):
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
 
     conn = MySQLdb.connect(host=db_host, 
@@ -385,14 +440,14 @@ def get_content(curr_content_type, ct_title=None):
                                 port=db_port)
     cursor = conn.cursor()
 
-    custom_field_names = get_ct_field_names(curr_content_type)
+    custom_field_names = get_ct_field_names(debug_output_file_handle, curr_content_type)
 
     get_sql = "SELECT node.nid, node.vid, node.type, node.uuid "
     get_sql += ", node_field_data.title, node_field_data.created, node_field_data.changed, node_field_data.promote, node_field_data.sticky"
 
     # need to know the field type to pick column names correctly in the sql
     for field_data in custom_field_names:
-        (field_name, field_type) = field_data
+        (field_name, field_type, field_required) = field_data
         
         if field_name == "" or field_name is None:
             continue
@@ -448,7 +503,7 @@ def get_content(curr_content_type, ct_title=None):
     get_sql += "LEFT JOIN node_field_data ON node.nid = node_field_data.nid AND node_field_data.type = '" + curr_content_type + "' AND node_field_data.langcode = 'en' "
     
     for field_data in custom_field_names:
-        (field_name, field_type) = field_data
+        (field_name, field_type, field_required) = field_data
         
         if field_name == "" or field_name is None:
             continue
@@ -495,7 +550,7 @@ def ct_field_exists(ct_machine_name, ct_field_name="body"):
     
     get_sql = "SELECT data FROM config WHERE name LIKE 'field.field.node." + ct_machine_name + ".field_" + ct_field_name + "'"
     
-    debug_output_file_handle.write("get_content_types sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.write("ct_field_exists sql statement: " + str(get_sql) + ENDL)
     debug_output_file_handle.flush()
     cursor.execute(get_sql)
     content_type_metadata = cursor.fetchall()
@@ -549,7 +604,7 @@ def create_machine_readable_name(non_machine_readable_name):
 
     return return_string
 
-def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_username=None, dict_ct_data_record_in_xml=None):
+def add_content_via_selenium(debug_output_file_handle, content_type, ct_has_title=True, ct_title=None, ct_username=None, dict_ct_data_record_in_xml=None):
     """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
     if ct_has_title and (ct_title == "" or ct_title is None):
         debug_output_file_handle.write("Cannot add this without a Title - content type:" + content_type)
@@ -559,6 +614,7 @@ def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_
 
     driver.get(current_website_url + "/user")
 
+    current_website_human_name = get_site_name(debug_output_file_handle)
     assert "Log in | " + current_website_human_name in driver.title
     
     username = driver.find_element_by_id("edit-name")
@@ -575,7 +631,7 @@ def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_
     # assert "Add content type | " + current_website_human_name in driver.title
 
     if ct_has_title and ct_title != "" and ct_title is not None:
-        debug_output_file_handle.write("entering title: " + ct_title)
+        debug_output_file_handle.write("entering title: " + ct_title + ENDL)
         elem = driver.find_element_by_id("edit-title-0-value")
         elem.clear()
         elem.send_keys(ct_title)
@@ -592,17 +648,36 @@ def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_
     if dict_ct_data_record_in_xml is not None:
         for field_name in dict_ct_data_record_in_xml:
             
-            field_type = get_field_type(content_type, field_name)
+            field_type = get_field_type(debug_output_file_handle, content_type, field_name)
+            
+            debug_output_file_handle.write("The field type for field_name: " + str(field_name) + " is: " + str(field_type) + ENDL)
+            
             if field_type is None:
                 continue
-            
-            if field_type == "link" :
+
+            if field_type == "link":
                 field_data = str(dict_ct_data_record_in_xml[field_name])
                 elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-0-uri")
                 elem.clear()
-                debug_output_file_handle.write("entering " + str(field_name) + ":" + field_data + ENDL)
+                debug_output_file_handle.write("entering " + str(field_name) + ":" + str(field_data) + ENDL)
                 elem.send_keys(field_data)
-            
+
+            if field_type == "datetime":
+                field_data = str(dict_ct_data_record_in_xml[field_name])
+                elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-0-value-date")
+                elem.clear()
+                debug_output_file_handle.write("entering " + str(field_name) + ":" + str(field_data) + ENDL)
+                proper_formatted_date = (datetime.strptime(field_data, '%Y-%m-%d %H:%M:%S')).strftime("%m/%d/%Y")
+                elem.send_keys(proper_formatted_date)
+
+            if field_type == "file" or field_type == "image":
+                field_data = os.path.abspath(os.path.join(files_directory, str(dict_ct_data_record_in_xml[field_name])))
+                elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-0-upload")
+                elem.clear()
+                debug_output_file_handle.write("entering " + str(field_name) + ":" + str(field_data) + ENDL)
+                elem.send_keys(field_data)                
+                time.sleep(10)
+                        
             debug_output_file_handle.write("The field type for " + str(field_name) + " is " + str(field_type) + ENDL)
 	
     elem = driver.find_element_by_id("edit-submit")
@@ -612,11 +687,12 @@ def add_content_via_selenium(content_type, ct_has_title=True, ct_title=None, ct_
 
     driver.close()
     
-def add_field_data_to_site(content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field):
+def add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field):
     debug_output_file_handle.write("Could not find " + str(db_field_name) + "(type:" + str(field_type) + ") in the new site, so adding it..." + ENDL)
+    debug_output_file_handle.write(str((content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field)) + ENDL)
     
     if db_field_name == "created" or db_field_name == "changed" or db_field_name == "sticky":
-        update_field_data_in_site(content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field, None)
+        update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field, None)
         return
     
     # Field does not exist in this database so not adding the data
@@ -645,7 +721,15 @@ def add_field_data_to_site(content_type, curr_nid, curr_vid, db_field_name, fiel
         return
 
     if field_type == "link":
-        debug_output_file_handle.write("The field " + str(db_field_name) + " requires an entity reference function to be built (" + str(xml_ct_data_field) + ")..." + ENDL)
+        table_name = "node__" + db_field_name
+        executeSQL = "INSERT INTO " + table_name + " (bundle, deleted, entity_id, revision_id, langcode, delta, " + db_field_name + "_uri, " + db_field_name + "_options "
+        executeSQL += ") VALUES ('" + content_type + "', 0, " + str(curr_nid) + ", " + str(curr_vid) + ", 'en', 0, '"
+        executeSQL += xml_ct_data_field
+        executeSQL += "', 'a:0:{}')"
+
+        if("None" not in executeSQL):
+            execute_and_commit_sql(debug_output_file_handle, executeSQL)
+            
         return
 
     if field_type == "email":
@@ -656,7 +740,7 @@ def add_field_data_to_site(content_type, curr_nid, curr_vid, db_field_name, fiel
         executeSQL += "')"
 
         if("None" not in executeSQL):
-            execute_and_commit_sql(executeSQL)
+            execute_and_commit_sql(debug_output_file_handle, executeSQL)
         
         return
     
@@ -671,14 +755,15 @@ def add_field_data_to_site(content_type, curr_nid, curr_vid, db_field_name, fiel
     table_name = "node__" + db_field_name
     executeSQL = "INSERT INTO " + table_name + " (bundle, deleted, entity_id, revision_id, langcode, delta, " + table_name + "." + db_field_name + "_value "
     executeSQL += ") VALUES ('" + content_type + "', 0, " + str(curr_nid) + ", " + str(curr_vid) + ", 'en', 0, '"
-    executeSQL += xml_ct_data_field
+    executeSQL += str(xml_ct_data_field)
     executeSQL += "')"
 
     if("None" not in executeSQL):
-        execute_and_commit_sql(executeSQL)
+        execute_and_commit_sql(debug_output_file_handle, executeSQL)
     
-def update_field_data_in_site(content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field, db_data_field):        
+def update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field, db_data_field=None):        
     debug_output_file_handle.write("XML Data for field_name: " + str(db_field_name) + " (" + str(xml_ct_data_field) + ") does not match (" + str(db_data_field) + ") in the new site, so updating it..." + ENDL)
+    debug_output_file_handle.write(str((content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field, db_data_field)) + ENDL)
     
     if db_field_name == "created" or db_field_name == "changed" or db_field_name == "sticky":
         executeSQL = "UPDATE node_field_data SET " + db_field_name + " = " + xml_ct_data_field
@@ -686,16 +771,40 @@ def update_field_data_in_site(content_type, curr_nid, curr_vid, db_field_name, f
         executeSQL += " AND type = '" + str(content_type) + "' AND langcode = 'en' AND status = 1 "
         
         if("None" not in executeSQL):
-            execute_and_commit_sql(executeSQL)
-        
+            execute_and_commit_sql(debug_output_file_handle, executeSQL)
+            
         return
-        
+    
     # Field does not exist in this database so not updating the data
     if field_type is None:
         debug_output_file_handle.write("The field " + str(db_field_name) + " does not exist in this website so we cannot update the data (" + str(xml_ct_data_field) + ")..." + ENDL)
         return
+
+    if len(db_field_name) < 6:
+        return
     
-def compare_xml_to_db_data_and_fix(content_type, dict_ct_data_record_in_xml, dict_ct_data_records_in_db):
+    if field_type == "link":
+        table_name = "node__" + db_field_name
+        executeSQL = "UPDATE " + table_name + " SET " + db_field_name + "_uri = " + xml_ct_data_field
+        executeSQL += " WHERE nid = " + str(curr_nid) + " AND vid = " + str(curr_vid)
+        executeSQL += " AND type = '" + str(content_type) + "' AND langcode = 'en'"
+        
+        if("None" not in executeSQL):
+            execute_and_commit_sql(debug_output_file_handle, executeSQL)
+            
+        return
+    
+    table_name = "node__" + db_field_name
+    executeSQL = "UPDATE " + table_name + " SET  " + db_field_name + "_value = "
+    executeSQL += "'" + str(xml_ct_data_field) + "' "
+    executeSQL += "WHERE bundle = '" + content_type + "' AND deleted = 0 AND langcode = 'en' AND entity_id = " + str(curr_nid) + " AND revision_id = " + str(curr_vid) + " AND delta = 0 "
+
+    if("None" not in executeSQL):
+        execute_and_commit_sql(debug_output_file_handle, executeSQL)
+
+    return
+    
+def compare_xml_to_db_data_and_fix(debug_output_file_handle, content_type, dict_ct_data_record_in_xml, dict_ct_data_records_in_db):
     curr_nid = None
     curr_vid = None
     for field_name in dict_ct_data_record_in_xml:
@@ -719,35 +828,48 @@ def compare_xml_to_db_data_and_fix(content_type, dict_ct_data_record_in_xml, dic
         if field_name == "uid":
             continue
 
-        field_type = get_field_type(content_type, field_name)
-
+        field_type = get_field_type(debug_output_file_handle, content_type, field_name)
+        debug_output_file_handle.write(str(content_type) + ", " + str(field_name) + ", " + str(field_type) + ENDL)
+        
         if field_type is None:
-            continue
-            
-        if field_name not in dict_ct_data_records_in_db.keys():
-            add_new_data = True
-        elif str(dict_ct_data_record_in_xml[field_name]) != str(dict_ct_data_records_in_db[field_name]):
-            update_data = True
+            if field_name != "created" and field_name != "changed":
+                continue
 
+        xml_field_name = field_name
+        db_field_name = field_name
+        
+        if not dictonary_has_key(dict_ct_data_records_in_db, field_name) and not dictonary_has_key(dict_ct_data_records_in_db, field_name + "_value"):
+            add_new_data = True
+        elif dictonary_has_key(dict_ct_data_records_in_db, field_name) and str(dict_ct_data_record_in_xml[field_name]) != str(dict_ct_data_records_in_db[field_name]):
+            update_data = True
+        elif dictonary_has_key(dict_ct_data_records_in_db, field_name + "_value") and str(dict_ct_data_record_in_xml[field_name]) != str(dict_ct_data_records_in_db[field_name + "_value"]):
+            db_field_name = field_name + "_value"
+            update_data = True
+            
         if add_new_data and len(field_name) > 4 and field_name[-4:] == "_url":
             db_field_name = field_name[:-4] + "_uri"
-            if db_field_name not in dict_ct_data_records_in_db.keys():
-                add_field_data_to_site(content_type, curr_nid, curr_vid, db_field_name, field_type, dict_ct_data_record_in_xml)
-                continue
             
+            if not dictonary_has_key(dict_ct_data_records_in_db, db_field_name):
+                add_new_data = True
             elif dict_ct_data_record_in_xml[field_name] != dict_ct_data_records_in_db[db_field_name]:
-                update_field_data_in_site(content_type, curr_nid, curr_vid, db_field_name, field_type, dict_ct_data_record_in_xml[field_name], dict_ct_data_records_in_db[db_field_name])
-                continue
-        
-        if add_new_data:
-            add_field_data_to_site(content_type, curr_nid, curr_vid, field_name, field_type, dict_ct_data_record_in_xml[field_name])
-            continue
+                update_data = True
+        elif dictonary_has_key(dict_ct_data_records_in_db, field_name + "_value"):
+            db_field_name = field_name + "_value"
 
-        if update_data:
-            update_field_data_in_site(content_type, curr_nid, curr_vid, field_name, field_type, dict_ct_data_record_in_xml[field_name], dict_ct_data_records_in_db[field_name])
-            continue
+            if dict_ct_data_record_in_xml[field_name] != dict_ct_data_records_in_db[db_field_name]:
+                update_data = True
+
+        if dictonary_has_key(dict_ct_data_records_in_db, db_field_name):
+            if dict_ct_data_records_in_db[db_field_name] is None or dict_ct_data_records_in_db[db_field_name] == "None":
+                add_new_data = True
+                update_data = False
+
+        if add_new_data:
+            add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, curr_vid, field_name, field_type, dict_ct_data_record_in_xml[xml_field_name])
+        elif update_data:
+            update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, curr_vid, field_name, field_type, dict_ct_data_record_in_xml[xml_field_name], dict_ct_data_records_in_db[db_field_name])
     
-def import_content_from_xml_file(import_directory, current_content_file):
+def import_content_from_xml_file(debug_output_file_handle, content_types_to_exclude, field_aliases, import_directory, current_content_file):
     """Take the content xml filename and automatically create the 
        content in the "current_website"."""
     
@@ -756,8 +878,13 @@ def import_content_from_xml_file(import_directory, current_content_file):
     num_xml_elements = len(list(xml_root))
 
     content_type_name = ct_filename_to_ct(import_directory, current_content_file)
+
+    if content_type_name in content_types_to_exclude:
+        print("This content type is in the exclude list so jumping to the next content type. content_type_name: " + content_type_name)
+        debug_output_file_handle.write("This content type is in the exclude list so jumping to the next content type. content_type_name: " + content_type_name + ENDL)
+        return
     
-    (field_names_in_db, db_ct_data_records) = get_content(content_type_name)
+    (field_names_in_db, db_ct_data_records) = get_content(debug_output_file_handle, content_type_name)
     num_records_added = 0
     
     for ct_data_records in xml_root:
@@ -780,15 +907,19 @@ def import_content_from_xml_file(import_directory, current_content_file):
             if ct_data_record.tag == "user_name" :
                 ct_user_name = ct_data_record.text
 
-            field_names_in_xml.append(ct_data_record.tag)
-            curr_ct_data_record_in_xml[ct_data_record.tag] = ct_data_record.text
+            if ct_data_record.tag in field_aliases.keys():
+                field_names_in_xml.append(field_aliases[ct_data_record.tag])
+                curr_ct_data_record_in_xml[field_aliases[ct_data_record.tag]] = ct_data_record.text
+            else:
+                field_names_in_xml.append(ct_data_record.tag)
+                curr_ct_data_record_in_xml[ct_data_record.tag] = ct_data_record.text
 
         debug_output_file_handle.write("content_type_name: " + str(content_type_name) + ENDL)
         debug_output_file_handle.write("ct_has_title: " + str(ct_has_title) + ENDL)
         debug_output_file_handle.write("ct_title: " + str(ct_title) + ENDL)
         debug_output_file_handle.write("ct_user_name: " + str(ct_user_name) + ENDL)
 
-        (curr_field_names_in_db, curr_ct_data_record_in_db) = get_content(content_type_name, ct_title=ct_title)
+        (curr_field_names_in_db, curr_ct_data_record_in_db) = get_content(debug_output_file_handle, content_type_name, ct_title=ct_title)
 
         # convert curr_ct_data_record_in_db information to a dictionary
         
@@ -800,28 +931,27 @@ def import_content_from_xml_file(import_directory, current_content_file):
                     dict_ct_data_records[curr_field_names_in_db[curr_field_index]] = curr_field_data
                     curr_field_index +=1
 
-        #debug_output_file_handle.write("xml data in dictionary form: " + str(curr_ct_data_record_in_xml))
-        #debug_output_file_handle.write("db data in dictionary form: " + str(dict_ct_data_records))
-
+        debug_output_file_handle.write("xml data in dictionary form: " + str(curr_ct_data_record_in_xml) + ENDL)
+        debug_output_file_handle.write("db data in dictionary form: " + str(dict_ct_data_records) + ENDL)
         
         if curr_ct_data_record_in_db is None or len(curr_ct_data_record_in_db) <= 0:
-            add_content_via_selenium(content_type_name, ct_has_title, ct_title, ct_user_name, curr_ct_data_record_in_xml)
+            add_content_via_selenium(debug_output_file_handle, content_type_name, ct_has_title, ct_title, ct_user_name, curr_ct_data_record_in_xml)
             
-        compare_xml_to_db_data_and_fix(content_type_name, curr_ct_data_record_in_xml, dict_ct_data_records)
+        compare_xml_to_db_data_and_fix(debug_output_file_handle, content_type_name, curr_ct_data_record_in_xml, dict_ct_data_records)
         
         num_records_added += 1
 
         if num_records_added % 5 == 5 :
             debug_output_file_handle.write(str(num_records_added) + " have been added to the content type " + ct_human_name + ".")
 
-def import_content_files():
+def import_content_files(debug_output_file_handle, content_types_to_exclude, field_aliases):
     """Import all the content files in "import_directory"."""
-    files_to_import = os.listdir(import_directory)
+    files_to_import = os.listdir(xml_directory)
     for content_filename in files_to_import:
         if fnmatch.fnmatch(content_filename, 'ct_data_*.xml'):
             debug_output_file_handle.write("Found a content type to import: " + content_filename)
-            current_content_file = os.path.join(import_directory, content_filename)
-            import_content_from_xml_file(import_directory, current_content_file)
+            current_content_file = os.path.join(xml_directory, content_filename)
+            import_content_from_xml_file(debug_output_file_handle, content_types_to_exclude, field_aliases, xml_directory, current_content_file)
 
 def prep_file_structure():
     """Ensures that all of the necessary file folders exist."""
@@ -837,17 +967,46 @@ def prep_file_structure():
     if not os.path.isdir(export_directory) :
         os.mkdir(export_directory)
 
+    if not os.path.isdir(files_directory) :
+        os.mkdir(files_directory)
+
     if not os.path.isdir(logs_directory) :
         os.mkdir(logs_directory)
 
-prep_file_structure()
+    if not os.path.isdir(xml_directory) :
+        os.mkdir(xml_directory)
 
-debug_output_file = os.path.join(logs_directory, 'content_debug.log')
-debug_output_file_handle = open(debug_output_file, mode='w')
+def main():
+    parser = argparse.ArgumentParser(description='Import drupal content types into a drupal 9 website.')
+    parser.add_argument('--exclude', type=str, required=False,
+                        help='comma separated list of content types to exclude from export')
 
-current_website_human_name = get_site_name()
-debug_output_file_handle.write("Starting Content Import of " + current_website_human_name + ENDL)
+    parameters = parser.parse_args()
 
-import_content_files()
+    content_types_to_exclude = csvStringToList(parameters.exclude, ",")
+    print(content_types_to_exclude)
 
-debug_output_file_handle.close()
+    field_aliases = {}
+    config = configparser.ConfigParser()
+    config.read(os.path.join(config_directory, 'config.ini'))
+    if 'field_aliases' in config:
+        for key in config['field_aliases']:
+            field_aliases[key] = config['field_aliases'][key]
+    print(field_aliases)
+    
+    prep_file_structure()
+
+    debug_output_file = os.path.join(logs_directory, 'content_debug.log')
+    debug_output_file_handle = open(debug_output_file, mode='w')
+
+    current_website_human_name = get_site_name(debug_output_file_handle)
+    debug_output_file_handle.write("Starting Content Import of " + current_website_human_name + ENDL)
+    debug_output_file_handle.write("content_types_to_exclude: " + str(content_types_to_exclude) + ENDL)
+    debug_output_file_handle.write("field_aliases: " + str(field_aliases) + ENDL)
+
+    import_content_files(debug_output_file_handle, content_types_to_exclude, field_aliases)
+
+    debug_output_file_handle.close()
+
+if __name__ == "__main__":
+    main()
