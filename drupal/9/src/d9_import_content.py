@@ -70,7 +70,19 @@ def dictonary_has_key(dictionary, key_to_check):
         if str(key) == str(key_to_check):
             return True
     return False
+
+def begins_with(haystack, needle):
+    length_of_needle = len(needle)
+
+    if length_of_needle > len(haystack):
+        return False
+    
+    if haystack[length_of_needle:] == needle :
+        return True
+
+    return False
         
+
 def ends_with(haystack, needle):
     length_of_needle = len(needle)
 
@@ -167,12 +179,12 @@ def print_empty_line(file_handle):
 
     file_handle.write(ENDL)
 
-def flush_print_files():
+def flush_print_files(debug_output_file_handle):
     """Write any data stored in memory to the file(debug_output_file_handle)."""
 
     debug_output_file_handle.flush()
 
-def drupal_9_json_get_key(json_string, json_key):
+def drupal_9_json_get_key(debug_output_file_handle, json_string, json_key):
     """drupal 9 does JSON differently than python does, apparently. 
        Find the json_key in json_string and return it's value."""
 
@@ -181,11 +193,30 @@ def drupal_9_json_get_key(json_string, json_key):
     return_string = return_string.replace(';', ':')
     return_string_array = return_string.split(':')
 
+    if return_string_array[1] == "a":
+        return_string = return_string[len(json_key)+1:return_string.find("}")]
+        return_string = return_string[return_string.find("{")+1:]
+        return_string = return_string.strip(":")
+        return_string_array = return_string.split(':')
+
+        curr_return_string = ""
+        curr_index = 0
+        for item in return_string_array:
+            if curr_index == 2:
+                curr_return_string += "," + item.strip('"')
+            curr_index += 1
+            if curr_index >= 3:
+                curr_index = 0
+                
+        return_string = curr_return_string.strip(",")
+        debug_output_file_handle.write("json_key: " + json_key + " return_string: " + return_string + ENDL)
+        return return_string
+
     if len(return_string_array) < 4 :
-        debug_output_file_handle.write("Could not find json_key " + json_key)
-        debug_output_file_handle.write()
-        debug_output_file_handle.write(json_string)
-        debug_output_file_handle.write()
+        debug_output_file_handle.write("Could not find json_key " + json_key + ENDL)
+        debug_output_file_handle.write( + ENDL)
+        debug_output_file_handle.write(json_string + ENDL)
+        debug_output_file_handle.write( + ENDL)
 
         return ""
 
@@ -256,7 +287,7 @@ def if_exists(debug_output_file_handle, table_name, column_names, column_data):
                 get_sql += str(column_name) + " = '" + str(column_data[curr_index]) + "'"
         curr_index += 1
     
-    debug_output_file_handle.write("get_ct_field_names sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.write("if_exists sql statement: " + str(get_sql) + ENDL)
     debug_output_file_handle.flush()
     cursor.execute(get_sql)
     does_it_exist = cursor.fetchall()
@@ -364,69 +395,118 @@ def get_site_name(debug_output_file_handle):
     if site_information_json is None:
         return ""
 
-    return_string = drupal_9_json_get_key(site_information_json[0][0], "name")
+    return_string = drupal_9_json_get_key(debug_output_file_handle, site_information_json[0][0], "name")
     
     return return_string
 
-def uploadListingPhotos(outputDirectory, newNodeId, newNodeTitle, oldPhotoList):
-    if(oldPhotoList is None):
+def upload_photos(debug_output_file_handle, curr_nid, field_name, old_photo_list):
+    if(old_photo_list is None):
         return
 
+    debug_output_file_handle.write("upload_photos:" + str(old_photo_list) + ENDL)
+    
     driver = webdriver.Chrome()
 
-    driver.get(newSiteURL + "/user")
+    driver.get(current_website_url + "/user")
 
-    assert "Login | " + siteHumanName in driver.title
+    current_website_human_name = get_site_name(debug_output_file_handle)
+    #assert "Login | " + current_website_human_name in driver.title
     
     username = driver.find_element_by_id("edit-name")
     username.clear()
-    username.send_keys(seleniumUsername)
+    username.send_keys(automated_username)
 
     password = driver.find_element_by_id("edit-pass")
     password.clear()
-    password.send_keys(seleniumPassword)
+    password.send_keys(automated_password)
 
     driver.find_element_by_id("edit-submit").click()
     
-    driver.get(newSiteURL + '/node/' + str(newNodeId) + '/edit')
-    assert "Edit Aircraft Listing " + str(newNodeTitle) + " | " + siteHumanName in driver.title
-
-    driver.find_element_by_css_selector(".group-aircraft-media").click()
-
-    uploadFilesLocation = imagesFolder
-    uploadFileList = oldPhotoList.replace("/", uploadFilesLocation)
+    driver.get(current_website_url + '/node/' + str(curr_nid) + '/edit')
     
-    oldPhotos = uploadFileList.split(', ')
+    old_photos = old_photo_list.split(', ')
     counter = 0
-    for oldPhoto in oldPhotos:
-        
-        if(oldPhoto is None or oldPhoto == uploadFilesLocation):
+    for old_photo in old_photos:
+        db_filename = get_filename(debug_output_file_handle, curr_nid)
+        debug_output_file_handle.write("upload_photos - db_filename:" + str(db_filename) + ENDL)
+        if db_filename != "":
+            continue
+            
+        if(old_photo is None):
             continue
         
-        if(not path.exists(oldPhoto) and oldPhoto.find("/") == -1):
-            oldPhoto = "/" + oldPhoto
-            oldPhoto = oldPhoto.replace("/", uploadFilesLocation)
+        field_data = os.path.abspath(os.path.join(files_directory, str(old_photo)))
         
-        if(not path.exists(oldPhoto)):
-            debug_output_file_handle.write("photo does not exist:", oldPhoto)
+        if(not os.path.exists(field_data)):
+            debug_output_file_handle.write("photo does not exist:", field_data)
             continue
         
-        elem = driver.find_element_by_id("edit-field-listing-image-und-" + str(counter) + "-upload")
-        elem.send_keys(oldPhoto)
-
-        driver.find_element_by_id("edit-field-listing-image-und-" + str(counter) + "-upload-button").click()
+        elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-0-upload")
+        elem.clear()
+        debug_output_file_handle.write("entering " + str(field_name) + ":" + str(field_data) + ENDL)
+        elem.send_keys(field_data)                
         time.sleep(10)
         
         counter += 1
-        
+                
     elem = driver.find_element_by_id("edit-submit")
     elem.click()
     
-    driver.get(newSiteURL + "/user/logout")
+    driver.get(current_website_url + "/user/logout")
 
     driver.close()
 
-    changeNodeUsersToAnonymous(newDBInfoAlias)
+def run_sql_fetch_all(sql_to_fetch): 
+    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    cursor = conn.cursor()
+    
+    cursor.execute(sql_to_fetch)
+    records = cursor.fetchall()
+    cursor.close()
+    conn.commit()
+    conn.close()
+
+    return records
+
+def get_filename(debug_output_file_handle, node_id):
+    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    cursor = conn.cursor()
+
+    get_sql = "SELECT filename "
+    get_sql += "FROM node__field_cover_image, file_managed "
+    get_sql += "WHERE node__field_cover_image.field_cover_image_target_id = file_managed.fid "
+    get_sql += "AND entity_id = " + str(node_id)
+
+    debug_output_file_handle.write("get_filename sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(get_sql)
+    filenames = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return_string = ""    
+    for filename in filenames:
+        return_string += filename[0] + ","
+
+    return_string = return_string.strip(",")
+    
+    return return_string
+
+def get_node_type_count(content_type):
+    conn = MySQLdb.connect(host=db_host, user=db_user, passwd=db_password, database=db_database, port=db_port)
+    cursor = conn.cursor()
+
+    get_sql = "SELECT COUNT(*) "
+    get_sql += "FROM node_field_data "
+    get_sql += "WHERE type = '" + content_type + "' "
+    get_sql += "AND status = 1"
+
+    node_type_count = run_sql_fetch_all(get_sql)
+
+    if(len(node_type_count) > 0):
+        return node_type_count[0][0]
+
+    return None
 
 def mysql_gen_select_statement(column_names, from_tables, where_clause = None, order_by = None, groupby = None):
     return_sql = "SELECT "
@@ -453,7 +533,7 @@ def mysql_gen_select_statement(column_names, from_tables, where_clause = None, o
 def d9_mysql_add_left_join_on(content_type, left_table_name, right_table_name):
     return "LEFT JOIN " + right_table_name + " ON " + left_table_name + ".nid = " + right_table_name + ".entity_id AND " + right_table_name + ".bundle = '" + content_type + "' AND " + right_table_name + ".deleted = 0 AND " + right_table_name + ".langcode = 'en' "
 
-def get_content_types(content_types_to_exclude):
+def get_content_types(debug_output_file_handle, content_types_to_exclude):
     """Query the database of the drupal 9 site to get all of the existing content types."""
 
     conn = MySQLdb.connect(host=db_host, 
@@ -475,7 +555,7 @@ def get_content_types(content_types_to_exclude):
     content_type_machine_names = []
     
     for content_type in content_types:
-        content_type_machine_name = drupal_9_json_get_key(content_type[0], "type")
+        content_type_machine_name = drupal_9_json_get_key(debug_output_file_handle, content_type[0], "type")
 
         if content_type_machine_name is None :
             continue
@@ -511,12 +591,12 @@ def get_ct_field_names(debug_output_file_handle, content_type_machine_name):
     for field_record in field_data:
         data_field = field_record[0]
         
-        field_name = drupal_9_json_get_key(data_field, "field_name")
+        field_name = drupal_9_json_get_key(debug_output_file_handle, data_field, "field_name")
         if field_name is None:
             continue
         
-        field_type = drupal_9_json_get_key(data_field, "field_type")
-        field_required = drupal_9_json_get_key(data_field, "required")
+        field_type = drupal_9_json_get_key(debug_output_file_handle, data_field, "field_type")
+        field_required = drupal_9_json_get_key(debug_output_file_handle, data_field, "required")
         
         #print(field_name)        
         #print(field_type)
@@ -539,6 +619,43 @@ def get_field_type(debug_output_file_handle, curr_content_type, curr_fieldname):
             return field_type
         
     return None
+
+def get_target_bundles(debug_output_file_handle, curr_content_type, curr_fieldname):
+    conn = MySQLdb.connect(host=db_host, 
+                                user=db_user, 
+                                passwd=db_password, 
+                                database=db_database, 
+                                port=db_port)
+    cursor = conn.cursor()
+    
+    get_sql = "SELECT data FROM config WHERE name LIKE 'field.field.node." + curr_content_type + "." + curr_fieldname + "'"
+    
+    debug_output_file_handle.write("get_target_bundles sql statement: " + str(get_sql) + ENDL)
+    debug_output_file_handle.flush()
+    cursor.execute(get_sql)
+    field_data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    target_bundles = ""
+    
+    for field_record in field_data:
+        data_field = field_record[0]
+        
+        field_name = drupal_9_json_get_key(debug_output_file_handle, data_field, "field_name")
+        if field_name is None:
+            continue
+        
+        target_bundles += "," + drupal_9_json_get_key(debug_output_file_handle, data_field, "target_bundles")
+        
+    target_bundle_array = target_bundles.strip(",").split(",")
+
+    return_array = []
+    for item in target_bundle_array:
+        if item not in return_array:
+            return_array.append(item)
+            
+    return return_array
 
 def get_content(debug_output_file_handle, curr_content_type, ct_title=None):
     """Query the database of the drupal 9 site to get all of the existing taxonomy vocabularies."""
@@ -585,7 +702,11 @@ def get_content(debug_output_file_handle, curr_content_type, ct_title=None):
                 #get_sql += ", " + right_table_name + "." + field_name + "_description "
                 #get_sql += ", " + right_table_name + "." + field_name + "_display "
             elif field_type == "entity_reference":
+                target_bundles = get_target_bundles(debug_output_file_handle, curr_content_type, field_name)
                 get_sql += ", " + right_table_name + "." + field_name + "_target_id "
+                for target_content_type in target_bundles:
+                    if target_content_type == "remote_video":
+                        get_sql += ", (SELECT field_media_oembed_video_value FROM media__field_media_oembed_video WHERE " + right_table_name + "." + field_name + "_target_id = entity_id AND bundle = 'remote_video' AND deleted = 0 AND langcode = 'en') " + field_name + "_target_video_value "
             elif field_type == "address":
                 get_sql += ", " + right_table_name + "." + field_name + "_organization "
                 get_sql += ", " + right_table_name + "." + field_name + "_address_line1 "
@@ -703,7 +824,7 @@ def get_custom_body_label(ct_machine_name):
 
     for ctfbmd_record in content_type_field_body_metadata:
         debug_output_file_handle.write(ctfbmd_record)
-        custom_body_label = drupal_9_json_get_key(ctfbmd_record[0], "label")
+        custom_body_label = drupal_9_json_get_key(debug_output_file_handle, ctfbmd_record[0], "label")
 
     return custom_body_label
 
@@ -715,6 +836,67 @@ def create_machine_readable_name(non_machine_readable_name):
 
     return return_string
 
+def embed_youtube_via_selenium(debug_output_file_handle, content_type, curr_nid, field_name, youtube_video_id = None):
+    if(youtube_video_id is None or youtube_video_id == ""):
+        return
+
+    debug_output_file_handle.write("embed_youtube_via_selenium:" + str(youtube_video_id) + ENDL)
+    
+    driver = webdriver.Chrome()
+
+    driver.get(current_website_url + "/user")
+
+    current_website_human_name = get_site_name(debug_output_file_handle)
+    #assert "Login | " + current_website_human_name in driver.title
+    
+    username = driver.find_element_by_id("edit-name")
+    username.clear()
+    username.send_keys(automated_username)
+
+    password = driver.find_element_by_id("edit-pass")
+    password.clear()
+    password.send_keys(automated_password)
+
+    driver.find_element_by_id("edit-submit").click()
+    
+    driver.get(current_website_url + '/node/' + str(curr_nid) + '/edit')
+
+    elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-open-button")
+    elem.click()
+    time.sleep(5)
+    
+    str_url = "https://www.youtube.com/watch?v=" + str(youtube_video_id)
+    
+    elem = driver.find_element_by_xpath("//*[starts-with(@placeholder,'https:')]")
+    elem.clear()
+    debug_output_file_handle.write("entering " + str(field_name) + ":" + str(str_url) + ENDL)
+    elem.send_keys(str(str_url))
+
+    # Add the video to the media library
+    elem = driver.find_element_by_xpath("//*[starts-with(@id,'edit-submit--')]")
+    elem.click()
+    time.sleep(5)
+
+    # Polite Save Request
+    elem = driver.find_element_by_xpath('//button[normalize-space()="Save"]')
+    elem.click()
+    time.sleep(5)
+
+    # Insert Selected Request
+    elem = driver.find_element_by_xpath('//button[normalize-space()="Insert selected"]')
+    elem.click()
+    time.sleep(5)
+    
+    # Save the Node now that we are done
+    elem = driver.find_element_by_id("edit-submit")
+    elem.click()
+    
+    time.sleep(5)
+
+    driver.get(current_website_url + "/user/logout")
+
+    driver.close()
+    
 def add_content_via_selenium(debug_output_file_handle, content_type, ct_has_title=True, ct_title=None, ct_username=None, dict_ct_data_record_in_xml=None):
     """Add a new vocabulary to the "current_website" using Selenium (assuming its a drupal 9 site). """
     if ct_has_title and (ct_title == "" or ct_title is None):
@@ -777,11 +959,17 @@ def add_content_via_selenium(debug_output_file_handle, content_type, ct_has_titl
                 debug_output_file_handle.write("entering " + str(field_name) + ":" + str(field_data) + ENDL)
                 elem.send_keys(field_data)
 
+            if field_type == "text_with_summary":
+                continue
+                
             if field_type == "link":
                 field_data = dict_ct_data_record_in_xml[field_name]
                 if field_data is None:
                     continue
-                
+
+                if not begins_with(field_data, "http"):
+                    field_data += "https://" + field_data
+                    
                 elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-0-uri")
                 elem.clear()
                 debug_output_file_handle.write("entering " + str(field_name) + ":" + str(field_data) + ENDL)
@@ -804,10 +992,15 @@ def add_content_via_selenium(debug_output_file_handle, content_type, ct_has_titl
                     continue
                 
                 field_data = os.path.abspath(os.path.join(files_directory, str(field_data)))
+                
+                if(not path.exists(field_data)):
+                    debug_output_file_handle.write("file/photo does not exist:", field_data)
+                    continue
+        
                 elem = driver.find_element_by_id("edit-" + field_name.replace("_", "-") + "-0-upload")
                 elem.clear()
                 debug_output_file_handle.write("entering " + str(field_name) + ":" + str(field_data) + ENDL)
-                elem.send_keys(field_data)                
+                elem.send_keys(field_data)
                 time.sleep(10)
                         
             debug_output_file_handle.write("The field type for " + str(field_name) + " is " + str(field_type) + ENDL)
@@ -834,12 +1027,8 @@ def add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, cur
         debug_output_file_handle.write("The field " + str(db_field_name) + " does not exist in this website so we cannot add the data (" + str(xml_ct_data_field) + ")..." + ENDL)
         return
     
-    if field_type == "image":
-        debug_output_file_handle.write("The field " + str(db_field_name) + " requires an image upload function to be built (" + str(xml_ct_data_field) + ")..." + ENDL)
-        return
-
-    if field_type == "file":
-        debug_output_file_handle.write("The field " + str(db_field_name) + " requires a file upload function to be built (" + str(xml_ct_data_field) + ")..." + ENDL)
+    if field_type == "file" or field_type == "image":
+        upload_photos(debug_output_file_handle, curr_nid, str(db_field_name), str(xml_ct_data_field))
         return
 
     if field_type == "taxonomy_term_reference":
@@ -847,6 +1036,13 @@ def add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, cur
         return
 
     if field_type == "entity_reference":
+        field_name = db_field_name[:-len("_target_video")]
+        target_bundles = get_target_bundles(debug_output_file_handle, content_type, "field_" + field_name)
+        for target_content_type in target_bundles:
+            if target_content_type == "remote_video":
+                embed_youtube_via_selenium(debug_output_file_handle, content_type, curr_nid, "field_" + field_name, xml_ct_data_field)
+                return
+            
         debug_output_file_handle.write("The field " + str(db_field_name) + " requires an entity reference function to be built (" + str(xml_ct_data_field) + ")..." + ENDL)
         return
 
@@ -860,7 +1056,12 @@ def add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, cur
         column_names.append(db_field_name + "_options")
         
         column_data = []
-        column_data.append(xml_ct_data_field)
+
+        field_data = xml_ct_data_field
+        if not begins_with(field_data, "http"):
+            field_data += "https://" + field_data
+            
+        column_data.append(field_data)
         column_data.append('a:0:{}')
         
         insert_if_not_exists_drupal_field_table(debug_output_file_handle, content_type, "node__" + db_field_name, curr_nid, curr_vid, column_names, column_data)
@@ -868,19 +1069,38 @@ def add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, cur
         return
 
     if field_type == "email":
-        insert_if_not_exists_drupal_field_table(debug_output_file_handle, content_type, "node__" + db_field_name, curr_nid, curr_vid, (db_field_name + "_email"), (xml_ct_data_field))
+        column_names = []
+        column_names.append(db_field_name + "_email")
+    
+        column_data = []
+        column_data.append(xml_ct_data_field)
+    
+        insert_if_not_exists_drupal_field_table(debug_output_file_handle, content_type, "node__" + db_field_name, curr_nid, curr_vid, column_names, column_data)
         
         return
     
     if field_type == "text_with_summary" :
-        debug_output_file_handle.write("The field " + str(db_field_name) + " requires a text with summary function to be built (" + str(xml_ct_data_field) + ")..." + ENDL)
+        column_names = []
+        column_names.append(db_field_name + "_value")
+        column_names.append(db_field_name + "_format")
+        
+        column_data = []
+        column_data.append(prep_for_mysql_query(xml_ct_data_field))
+        column_data.append('full_html')
+        insert_if_not_exists_drupal_field_table(debug_output_file_handle, content_type, "node__" + db_field_name, curr_nid, curr_vid, column_names, column_data)
         return
 
     if field_type == "yoast_seo" :
         debug_output_file_handle.write("The field " + str(db_field_name) + " requires a yoast seo function to be built (" + str(xml_ct_data_field) + ")..." + ENDL)
         return
 
-    insert_if_not_exists_drupal_field_table(debug_output_file_handle, content_type, "node__" + db_field_name, curr_nid, curr_vid, (db_field_name), (xml_ct_data_field))
+    column_names = []
+    column_names.append(db_field_name + "_value")
+    
+    column_data = []
+    column_data.append(xml_ct_data_field)
+    
+    insert_if_not_exists_drupal_field_table(debug_output_file_handle, content_type, "node__" + db_field_name, curr_nid, curr_vid, column_names, column_data)
     
 def update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field, db_data_field=None):        
     debug_output_file_handle.write("XML Data for field_name: " + str(db_field_name) + " (" + str(xml_ct_data_field) + ") does not match (" + str(db_data_field) + ") in the new site, so updating it..." + ENDL)
@@ -905,8 +1125,18 @@ def update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, 
         return
     
     if field_type == "link":
+        
+        field_data = xml_ct_data_field
+        if not begins_with(field_data, "http"):
+            field_data += "https://" + field_data
+            
+        if field_data == db_data_field:
+            debug_output_file_handle.write("Actually, XML Data for field_name: " + str(db_field_name) + " (" + str(xml_ct_data_field) + ") does match (" + str(db_data_field) + ") in the new site, so not updating it..." + ENDL)
+            debug_output_file_handle.write(str((content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field, db_data_field)) + ENDL)
+            return
+        
         table_name = "node__" + db_field_name
-        executeSQL = "UPDATE " + table_name + " SET " + db_field_name + "_uri = " + xml_ct_data_field
+        executeSQL = "UPDATE " + table_name + " SET " + db_field_name + "_uri = " + field_data
         executeSQL += " WHERE nid = " + str(curr_nid) + " AND vid = " + str(curr_vid)
         executeSQL += " AND type = '" + str(content_type) + "' AND langcode = 'en'"
         
@@ -914,7 +1144,32 @@ def update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, 
             execute_and_commit_sql(debug_output_file_handle, executeSQL)
             
         return
-    
+
+    if field_type == "entity_reference":
+        field_name = db_field_name[:-len("_target_video")]
+        target_bundles = get_target_bundles(debug_output_file_handle, content_type, "field_" + field_name)
+        for target_content_type in target_bundles:
+            if target_content_type == "remote_video":
+                if xml_ct_data_field != db_data_field:
+                    if 'https://www.youtube.com/watch?v=' + str(xml_ct_data_field) == str(db_data_field):
+                        return
+
+                    if not begins_with(xml_ct_data_field, "http"):
+                        xml_ct_data_field = "https://www.youtube.com/watch?v=" + xml_ct_data_field
+                    
+                    table_name = "media__field_media_oembed_video"
+                    executeSQL = "UPDATE " + table_name + " SET field_media_oembed_video_value = "
+                    executeSQL += "'" + str(xml_ct_data_field) + "' "
+                    executeSQL += "WHERE bundle = '" + content_type + "' AND deleted = 0 AND langcode = 'en' AND entity_id = " + str(curr_nid) + " AND revision_id = " + str(curr_vid) + " AND delta = 0 "
+
+                    if("None" not in executeSQL):
+                        execute_and_commit_sql(debug_output_file_handle, executeSQL)
+        
+                return
+            
+        debug_output_file_handle.write("The field " + str(db_field_name) + " requires an entity reference function to be built (" + str(xml_ct_data_field) + ")..." + ENDL)
+        return
+        
     table_name = "node__" + db_field_name
     executeSQL = "UPDATE " + table_name + " SET  " + db_field_name + "_value = "
     executeSQL += "'" + str(xml_ct_data_field) + "' "
@@ -925,7 +1180,7 @@ def update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, 
 
     return
     
-def compare_xml_to_db_data_and_fix(debug_output_file_handle, content_type, dict_ct_data_record_in_xml, dict_ct_data_records_in_db):
+def compare_xml_to_db_data_and_fix(debug_output_file_handle, field_aliases, content_type, dict_ct_data_record_in_xml, dict_ct_data_records_in_db):
     curr_nid = None
     curr_vid = None
     for field_name in dict_ct_data_record_in_xml:
@@ -954,6 +1209,8 @@ def compare_xml_to_db_data_and_fix(debug_output_file_handle, content_type, dict_
         
         if field_type is None:
             if field_name != "created" and field_name != "changed":
+                if field_name != "title" and field_name != "comment" and field_name != "sticky" and dictonary_has_key(dict_ct_data_record_in_xml, field_name):
+                    compare_entity_reference_fields(debug_output_file_handle, field_aliases, content_type, curr_nid, curr_vid, field_name, str(dict_ct_data_record_in_xml[field_name]), dict_ct_data_records_in_db)
                 continue
 
         xml_field_name = field_name
@@ -991,6 +1248,31 @@ def compare_xml_to_db_data_and_fix(debug_output_file_handle, content_type, dict_
             add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, curr_vid, field_name, field_type, dict_ct_data_record_in_xml[xml_field_name])
         elif update_data:
             update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, curr_vid, field_name, field_type, dict_ct_data_record_in_xml[xml_field_name], dict_ct_data_records_in_db[db_field_name])
+
+def compare_entity_reference_fields(debug_output_file_handle, field_aliases, content_type, curr_nid, curr_vid, db_field_name, xml_ct_data_field, dict_ct_data_records_in_db):       
+    debug_output_file_handle.write("Compare Entity Reference Fields - field_name: " + str(db_field_name) + " xml_ct_data_field: " + str(xml_ct_data_field) + ENDL)
+    
+    db_field_data = get_ct_field_names(debug_output_file_handle, content_type)
+    for field_data in db_field_data:
+        (field_name, field_type, field_required) = field_data
+        if field_type == "entity_reference":
+            target_bundles = get_target_bundles(debug_output_file_handle, content_type, field_name)
+            for target_content_type in target_bundles:
+                if target_content_type == "remote_video":
+                    if field_name == db_field_name or (dictonary_has_key(field_aliases, field_name) and field_aliases[field_name] == db_field_name):
+                        if xml_ct_data_field is None:
+                            continue
+
+                        if dictonary_has_key(dict_ct_data_records_in_db, field_name + "_target_video_value") and dict_ct_data_records_in_db[field_name + "_target_video_value"] is None:
+                            add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, "entity_reference", xml_ct_data_field)
+                            return
+
+                        if dictonary_has_key(dict_ct_data_records_in_db, field_name + "_target_video_value"):
+                            update_field_data_in_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, "entity_reference", xml_ct_data_field, dict_ct_data_records_in_db[field_name + "_target_video_value"])
+                            return
+
+                        add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, "entity_reference", xml_ct_data_field)
+                        return
     
 def import_content_from_xml_file(debug_output_file_handle, content_types_to_exclude, field_aliases, import_directory, current_content_file):
     """Take the content xml filename and automatically create the 
@@ -1008,6 +1290,7 @@ def import_content_from_xml_file(debug_output_file_handle, content_types_to_excl
         return
     
     (field_names_in_db, db_ct_data_records) = get_content(debug_output_file_handle, content_type_name)
+    debug_output_file_handle.write(str(field_names_in_db) + ENDL)
     num_records_added = 0
     
     for ct_data_records in xml_root:
@@ -1060,22 +1343,53 @@ def import_content_from_xml_file(debug_output_file_handle, content_types_to_excl
         if curr_ct_data_record_in_db is None or len(curr_ct_data_record_in_db) <= 0:
             add_content_via_selenium(debug_output_file_handle, content_type_name, ct_has_title, ct_title, ct_user_name, curr_ct_data_record_in_xml)
             
-        compare_xml_to_db_data_and_fix(debug_output_file_handle, content_type_name, curr_ct_data_record_in_xml, dict_ct_data_records)
+        compare_xml_to_db_data_and_fix(debug_output_file_handle, field_aliases, content_type_name, curr_ct_data_record_in_xml, dict_ct_data_records)
         
         num_records_added += 1
 
-        if num_records_added % 5 == 5 :
-            debug_output_file_handle.write(str(num_records_added) + " have been added to the content type " + ct_human_name + ".")
+        if num_records_added % 5 == 0 :
+            debug_output_file_handle.write(str(num_records_added) + " have been added to the content type " + content_type_name + ".")
+
+        flush_print_files(debug_output_file_handle)
 
 def import_content_files(debug_output_file_handle, content_types_to_exclude, field_aliases):
     """Import all the content files in "import_directory"."""
     files_to_import = os.listdir(xml_directory)
     for content_filename in files_to_import:
         if fnmatch.fnmatch(content_filename, 'ct_data_*.xml'):
-            debug_output_file_handle.write("Found a content type to import: " + content_filename)
+            debug_output_file_handle.write("Found a content type to import: " + content_filename + ENDL)
             current_content_file = os.path.join(xml_directory, content_filename)
             import_content_from_xml_file(debug_output_file_handle, content_types_to_exclude, field_aliases, xml_directory, current_content_file)
 
+def print_new_stats(debug_output_file_handle):
+    output_string = "><><><><><><><><><><><><><><><><><><><><><><" + ENDL
+    output_string += "Counts of content in the new website..." + ENDL
+
+    output_string += get_all_site_stats(debug_output_file_handle) + ENDL
+    output_string += "><><><><><><><><><><><><><><><><><><><><><><" + ENDL
+
+    print(output_string)
+    debug_output_file_handle.write(output_string)
+    
+def get_site_stats_of_content_type(content_type):
+    output_string = ""
+    
+    content_type_count = get_node_type_count(content_type)
+    output_string += "Number of " + str(content_type) + ": " + str(content_type_count) + ENDL
+
+    return output_string
+
+def get_all_site_stats(debug_output_file_handle):
+    output_string = ""
+
+    content_types = get_content_types(debug_output_file_handle, ())
+    for content_type in content_types:
+        curr_content_type = str(content_type)
+
+        output_string += get_site_stats_of_content_type(curr_content_type)  
+
+    return output_string
+    
 def prep_file_structure():
     """Ensures that all of the necessary file folders exist."""
     if not os.path.isdir(INPUT_DIRECTORY) :
@@ -1127,8 +1441,12 @@ def main():
     debug_output_file_handle.write("content_types_to_exclude: " + str(content_types_to_exclude) + ENDL)
     debug_output_file_handle.write("field_aliases: " + str(field_aliases) + ENDL)
 
+    print_new_stats(debug_output_file_handle)
+    
     import_content_files(debug_output_file_handle, content_types_to_exclude, field_aliases)
 
+    print_new_stats(debug_output_file_handle)
+    
     debug_output_file_handle.close()
 
 if __name__ == "__main__":
