@@ -1015,7 +1015,7 @@ def add_content_via_selenium(debug_output_file_handle, content_type, ct_has_titl
     driver.close()
     
 def add_field_data_to_site(debug_output_file_handle, content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field):
-    debug_output_file_handle.write("Could not find " + str(db_field_name) + "(type:" + str(field_type) + ") in the new site, so adding it..." + ENDL)
+    debug_output_file_handle.write("Could not find " + str(db_field_name) + " (type:" + str(field_type) + ") in the new site, so adding it..." + ENDL)
     debug_output_file_handle.write(str((content_type, curr_nid, curr_vid, db_field_name, field_type, xml_ct_data_field)) + ENDL)
     
     if db_field_name == "created" or db_field_name == "changed" or db_field_name == "sticky":
